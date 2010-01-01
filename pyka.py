@@ -30,7 +30,6 @@ else:
 
 
 #utility functions
-
 def dictify(input_text):
     '''convert wsgi.input to {}
 Eg name=Erick&time=11pm to {'name':['Erick'], 'time':['11pm']}
@@ -57,6 +56,7 @@ def _404():
     '''no route found put a Template here'''
     return 'Page not found'
 
+#main components
 class Template(object):
     '''wrapper for string.Template 
 @see http://docs.python.org/library/string.html#template-strings'''
