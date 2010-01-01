@@ -14,13 +14,13 @@ import os, sys
 sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
 import config
 from Cookie import SimpleCookie
+from datetime import datetime
 
 '''errors and logger'''
 class HTTPRequestException(Exception): pass
 
 if config.DEBUG:
     def log(msg):
-        from datetime import datetime
         dbg_file = config.LOG_PATH + 'debug_%d_%d_%d.txt'%(datetime.now().year,datetime.now().month, datetime.now().day)
         fp = open(dbg_file, 'a+')
         fp.write(msg + '\n')
