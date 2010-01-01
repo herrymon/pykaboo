@@ -8,7 +8,7 @@ MVC? sort of... '''
 
 __version__ = '0.1'
 __author__ = 'Erick B email:herrymonster@gmail.com'
-__license__ = 'use at your own risk'
+__license__ = 'do whatever you want Ie use at your own risk'
 
 import os, sys
 sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
