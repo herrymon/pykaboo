@@ -53,7 +53,7 @@ Eg name=Erick&time=11pm to {'name':['Erick'], 'time':['11pm']}
     return dict
 
 def _404():
-    '''no route found put a Template here'''
+    '''no route found, put a Template here'''
     return 'Page not found'
 
 #main components
