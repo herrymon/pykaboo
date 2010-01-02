@@ -7,7 +7,7 @@ bottle.py
 MVC? sort of... ''' 
 
 __version__ = '0.1'
-__author__ = 'Erick B email:herrymonster@gmail.com'
+__author__ = 'Erick email:herrymonster@gmail.com'
 __license__ = 'do whatever you want Ie use at your own risk'
 
 import os, sys
