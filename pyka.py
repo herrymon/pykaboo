@@ -130,6 +130,7 @@ class App(object):
                     func = getattr(controller, method.lower())
                     head.state('200 OK')
                     response = func()
+                    # add an incrementing cookie, testing usge of Cookie module, have to remove this later
                     if environ.has_key('HTTP_COOKIE') and environ['HTTP_COOKIE']:
                         c = SimpleCookie(environ['HTTP_COOKIE'])
                         tmp = int(c['test'].value)
@@ -173,8 +174,7 @@ class App(object):
         __import__(candidate)
         module = sys.modules[candidate]
         controller_klass = getattr(module, candidate)
-        #controller = controller_klass({'p':path, 'i':input}) # can't use? p=path and i=input
-        controller = controller_klass(p=path, i=input) # can't use? p=path and i=input
+        controller = controller_klass(p=path, i=input)
         return controller
 
 
