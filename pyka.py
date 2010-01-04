@@ -1,13 +1,9 @@
 '''an attempt at a DIY wsgi framework, 
-inspired by:
-Ian Bicking tutorial @see http://pythonpaste.org/webob/do-it-yourself.html
-web.py 
-bottle.py
-
+inspired by: Ian Bicking tutorial @see http://pythonpaste.org/webob/do-it-yourself.html, web.py @see http://webpy.org/ and bottle.py @see http://github.com/defnull/bottle.
 MVC? sort of... ''' 
 
 __version__ = '0.1'
-__author__ = 'Erick email:herrymonster@gmail.com'
+__author__ = 'Erick :-) email: herrymonster@gmail.com'
 __license__ = 'do whatever you want Ie use at your own risk'
 
 import os, sys
@@ -32,7 +28,7 @@ else:
 #utility functions
 def dictify(input_text):
     '''convert wsgi.input to {}
-Eg name=Erick&time=11pm to {'name':['Erick'], 'time':['11pm']}
+Eg name=Erick&time=11pm to {'name': ['Erick'], 'time': ['11pm']}
 '''
     log('xutils.dictify: %d %s' %(len(input_text), input_text))
     dict = {}
@@ -58,8 +54,8 @@ def _404():
 
 #main components
 class Template(object):
-    '''wrapper for string.Template 
-@see http://docs.python.org/library/string.html#template-strings'''
+    '''instantiate with filename of html template file. Do not forget to set TEMPLATE_PATH in config.py. 
+wrapper for string.Template @see http://docs.python.org/library/string.html#template-strings'''
     def __init__(self, tfile, echo=True):
         try:
             self.echo = echo
@@ -84,7 +80,7 @@ class Template(object):
 
 
 class Controller(object):
-    '''controller base'''
+    '''all your controllers inherit this. Do not forget to set CONTROLLERS_PATH in config.py'''
     def __init__(self, **kwargs):
         self.path = kwargs.get('p',[])
         self.input = kwargs.get('i',{})
@@ -106,7 +102,7 @@ class Header(object):
     
 
 class App(object):
-    '''wsgi application wrapper'''
+    '''wsgi application wrapper, class is called as a func(tion)'''
     def __call__(self, environ, start_response):
         from time import time
         start_time = time()
@@ -145,10 +141,9 @@ class App(object):
         # not in ROUTES
         else:
             log('''
-                path info:%s 
-                config.CONTROLLER_PATH:%s
-                routes: %s'''
-                %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES))
+path info:%s 
+config.CONTROLLER_PATH:%s
+routes: %s''' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES))
             )
             head.state('404 Not Found')
             response = _404()

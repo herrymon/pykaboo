@@ -10,8 +10,10 @@ EXT = '.py'
 LOG_PATH = os.path.split(__file__)[0] + '/log/'
 TEMPLATES_PATH = os.path.split(__file__)[0] + '/html/'
 CONTROLLER_PATH = os.path.split(__file__)[0] + '/controllers/' # '' if in same dir as pyka
+SQLITE_PATH = os.path.split(__file__)[0] + '/data/'
 
 ROUTES = (
     ('/', 'Content'),
     ('/content', 'Content'),
+    ('/test', 'Test'),
 )
