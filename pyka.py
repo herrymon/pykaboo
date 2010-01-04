@@ -88,9 +88,12 @@ class Controller(object):
 
 class Header(object):
     '''response header and status object, arg to start_response'''
-    def __init__(self, status='200 OK', headers=[]):
+    def __init__(self, status='200 OK', headers=None):
         self.status = status
-        self.headers = headers
+        if headers:
+            self.headers = headers
+        else:
+            self.headers = []
         log('Header: Created header[status=%s, header=[%s]]' %(status, ','.join(headers)) )
 
     def state(self, status):
@@ -140,11 +143,9 @@ class App(object):
 
         # not in ROUTES
         else:
-            log('''
-path info:%s 
+            log('''path info:%s 
 config.CONTROLLER_PATH:%s
-routes: %s''' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES))
-            )
+routes: %s''' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES)) )
             head.state('404 Not Found')
             response = _404()
 
@@ -160,16 +161,18 @@ routes: %s''' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES)
             controller_file = os.path.dirname(__file__) + '/' + file
         return os.path.isfile(controller_file)
 
-    def _get_controller(self, candidate, path=[], input={}):
-        '''create a controller object
-@see http://technogeek.org/python-module.html 
+    def _get_controller(self, candidate, path=None, input=None):
+        '''create a controller object @see http://technogeek.org/python-module.html 
 @see http://docs.python.org/library/functions.html#__import__'''
         if config.CONTROLLER_PATH:
             sys.path.append(config.CONTROLLER_PATH)
         __import__(candidate)
         module = sys.modules[candidate]
         controller_klass = getattr(module, candidate)
-        controller = controller_klass(p=path, i=input)
+        path_arg = path if path else []
+        input_arg = input if input else {}
+        controller = controller_klass(p=path_arg, i=input_arg)
+
         return controller
 
 
