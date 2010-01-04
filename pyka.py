@@ -94,7 +94,7 @@ class Header(object):
             self.headers = headers
         else:
             self.headers = []
-        log('Header: Created header[status=%s, header=[%s]]' %(status, ','.join(headers)) )
+        log('Header: Created header[status=%s, header=[%s]]' %(status, ','.join(self.headers)) )
 
     def state(self, status):
         self.status = status
@@ -111,7 +111,7 @@ class App(object):
         start_time = time()
         method = environ['REQUEST_METHOD']
         path = environ['PATH_INFO'].split('/')
-        head.add('Content-Type', 'text/html')
+        header.add('Content-Type', 'text/html')
 
         #check if path is in ROUTES get controller mapped to route
         for route in config.ROUTES:
@@ -121,13 +121,13 @@ class App(object):
                     if method.upper() == 'POST':
                         input = dictify(environ['wsgi.input'].read())
                     elif method.upper() == 'GET':
-                        input = dictify(environ.get('QUERY_STRING', 'query_string'))
+                        input = dictify(environ.get('QUERY_STRING', ''))
                     else:
                         raise HTTPRequestException
 
                     controller = self._get_controller(module, path, input)
                     func = getattr(controller, method.lower())
-                    head.state('200 OK')
+                    header.state('200 OK')
                     response = func()
                     # add an incrementing cookie, testing usge of Cookie module, have to remove this later
                     if environ.has_key('HTTP_COOKIE') and environ['HTTP_COOKIE']:
@@ -138,7 +138,7 @@ class App(object):
                         c = SimpleCookie()
                         c['test'] = 0
                     response += c['test'].value
-                    head.add('Set-Cookie', 'test='+c['test'].value)
+                    header.add('Set-Cookie', 'test='+c['test'].value)
                     break
 
         # not in ROUTES
@@ -146,10 +146,10 @@ class App(object):
             log('''path info:%s 
 config.CONTROLLER_PATH:%s
 routes: %s''' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES)) )
-            head.state('404 Not Found')
+            header.state('404 Not Found')
             response = _404()
 
-        start_response(head.status, head.headers)
+        start_response(header.status, header.headers)
         log('pykaboo rendered in approximately: %f' %(time()-start_time,))
         return response
             
@@ -177,5 +177,5 @@ routes: %s''' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES)
 
 
 app = App()
-head = Header()
+header = Header()
 application = app
