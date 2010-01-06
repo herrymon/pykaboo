@@ -132,8 +132,10 @@ class App(object):
                         response = func()
                         # add an incrementing cookie, testing usge of Cookie module, have to remove this later
                         c = SimpleCookie(environ.get('HTTP_COOKIE',''))
-                        tmp = int(c.get('test','0').value)
-                        c['test'] = str(tmp + 1) if c['test'] else 0
+                        try:
+                            c['test'] = int(c['test'].value) + 1
+                        except KeyError:
+                            c['test'] = 0
                         response += c['test'].value
                         header.add('Set-Cookie', 'test='+c['test'].value)
                         break
