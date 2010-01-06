@@ -113,46 +113,54 @@ class App(object):
         path = environ['PATH_INFO'].split('/')
         header.add('Content-Type', 'text/html')
 
+        try:
         #check if path is in ROUTES get controller mapped to route
-        for route in config.ROUTES:
-            url, module = route
-            if url == environ['PATH_INFO']:
-                if self._controller_exists(module + config.EXT):
-                    if method.upper() == 'POST':
-                        input = dictify(environ['wsgi.input'].read())
-                    elif method.upper() == 'GET':
-                        input = dictify(environ.get('QUERY_STRING', ''))
-                    else:
-                        raise HTTPRequestException
+            for route in config.ROUTES:
+                url, module = route
+                if url == environ['PATH_INFO']:
+                    if self._controller_exists(module + config.EXT):
+                        if method.upper() == 'POST':
+                            input = dictify(environ['wsgi.input'].read())
+                        elif method.upper() == 'GET':
+                            input = dictify(environ.get('QUERY_STRING', ''))
+                        else:
+                            raise HTTPRequestException
 
-                    controller = self._get_controller(module, path, input)
-                    func = getattr(controller, method.lower())
-                    header.state('200 OK')
-                    response = func()
-                    # add an incrementing cookie, testing usge of Cookie module, have to remove this later
-                    if environ.has_key('HTTP_COOKIE') and environ['HTTP_COOKIE']:
-                        c = SimpleCookie(environ['HTTP_COOKIE'])
-                        tmp = int(c['test'].value)
-                        c['test'] = str(tmp + 1)
-                    else:
-                        c = SimpleCookie()
-                        c['test'] = 0
-                    response += c['test'].value
-                    header.add('Set-Cookie', 'test='+c['test'].value)
-                    break
+                        controller = self._get_controller(module, path, input)
+                        func = getattr(controller, method.lower())
+                        header.state('200 OK')
+                        response = func()
+                        # add an incrementing cookie, testing usge of Cookie module, have to remove this later
+                        c = SimpleCookie(environ.get('HTTP_COOKIE',''))
+                        tmp = int(c.get('test','0').value)
+                        c['test'] = str(tmp + 1) if c['test'] else 0
+                        response += c['test'].value
+                        header.add('Set-Cookie', 'test='+c['test'].value)
+                        break
 
-        # not in ROUTES
-        else:
-            log('''path info:%s 
-config.CONTROLLER_PATH:%s
-routes: %s''' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES)) )
-            header.state('404 Not Found')
-            response = _404()
+            # not in ROUTES
+            else:
+                log('''path info:%s 
+    config.CONTROLLER_PATH:%s
+    routes: %s''' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES)) )
+                header.state('404 Not Found')
+                response = _404()
 
-        start_response(header.status, header.headers)
-        log('pykaboo rendered in approximately: %f' %(time()-start_time,))
-        return response
-            
+            start_response(header.status, header.headers)
+            log('pykaboo rendered in approximately: %f' %(time()-start_time,))
+            return response
+        except:
+            # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
+            from sys import exc_info
+            from traceback import format_tb
+            e_type, e_value, tb = exc_info() 
+            traceback = ['Traceback (most recent call last):']
+            traceback += format_tb(tb)
+            traceback.append('%s: %s' % (e_type.__name__, e_value))
+            header.state('500 INTERNAL SERVER ERROR')
+            start_response(header.status, header.headers)
+            return '<br/>'.join(traceback)
+                
     def _controller_exists(self, file):
         '''check if controller file exists in config.CONTROLLER_PATH'''
         if config.CONTROLLER_PATH:
