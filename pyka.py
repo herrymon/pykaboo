@@ -116,7 +116,8 @@ class App(object):
         try:
         #check if path is in ROUTES get controller mapped to route
             for route in config.ROUTES:
-                url, module = route
+                url, mod_klass = route
+                module, klass = mod_klass.split('.', 1)
                 if url == environ['PATH_INFO']:
                     if self._controller_exists(module + config.EXT):
                         if method.upper() == 'POST':
@@ -124,9 +125,9 @@ class App(object):
                         elif method.upper() == 'GET':
                             input = dictify(environ.get('QUERY_STRING', ''))
                         else:
-                            raise HTTPRequestException
+                            raise HTTPRequestException('HTTP method is not supported only GET and POST is supported')
 
-                        controller = self._get_controller(module, path, input)
+                        controller = self._get_controller(module, klass, path, input)
                         func = getattr(controller, method.lower())
                         header.state('200 OK')
                         response = func()
@@ -171,14 +172,14 @@ class App(object):
             controller_file = os.path.dirname(__file__) + '/' + file
         return os.path.isfile(controller_file)
 
-    def _get_controller(self, candidate, path=None, input=None):
+    def _get_controller(self, module, klass, path=None, input=None):
         '''create a controller object @see http://technogeek.org/python-module.html 
 @see http://docs.python.org/library/functions.html#__import__'''
         if config.CONTROLLER_PATH:
             sys.path.append(config.CONTROLLER_PATH)
-        __import__(candidate)
-        module = sys.modules[candidate]
-        controller_klass = getattr(module, candidate)
+        __import__(module)
+        controller_module = sys.modules[module]
+        controller_klass = getattr(controller_module, klass)
         path_arg = path if path else []
         input_arg = input if input else {}
         controller = controller_klass(p=path_arg, i=input_arg)

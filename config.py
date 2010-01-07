@@ -13,7 +13,7 @@ CONTROLLER_PATH = os.path.split(__file__)[0] + '/controllers/' # '' if in same d
 SQLITE_PATH = os.path.split(__file__)[0] + '/data/'
 
 ROUTES = (
-    ('/', 'Content'),
-    ('/content', 'Content'),
-    ('/test', 'Test'),
+    ('/', 'Content.Content'),
+    ('/content', 'Content.Content'),
+    ('/test', 'Content.Test'),
 )
