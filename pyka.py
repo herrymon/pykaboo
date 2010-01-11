@@ -53,6 +53,20 @@ def _404():
     return 'Page not found'
 
 #main components
+class Response(object):
+    def __init__(self):
+        self.response = []
+
+    def add(self, resp=None):
+        self.response.extend(resp)
+
+    def __call__(self):
+        if config.DEBUG:
+            booger.append('</pre>')
+            self.add(booger)
+        return ''.join(self.response)
+
+
 class Template(object):
     '''instantiate with filename of html template file. Do not forget to set TEMPLATE_PATH in config.py. 
 wrapper for string.Template @see http://docs.python.org/library/string.html#template-strings'''
@@ -83,10 +97,10 @@ class Controller(object):
     '''all your controllers inherit this. Do not forget to set CONTROLLERS_PATH in config.py'''
     def __init__(self, *args):
         self.PATH, self.POST, self.GET, self.COOKIES = args
-        booger.append('Controller.path' + str(self.PATH))
-        booger.append('Controller.post' + str(self.POST))
-        booger.append('Controller.get' + str(self.GET))
-        booger.append('Controller.cookies' + str(self.COOKIES))
+        booger.append('\nController.path' + str(self.PATH))
+        booger.append('\nController.post' + str(self.POST))
+        booger.append('\nController.get' + str(self.GET))
+        booger.append('\nController.cookies' + str(self.COOKIES))
 
 
 class Header(object):
@@ -114,40 +128,42 @@ class App(object):
         start_time = time()
         method = environ['REQUEST_METHOD']
         path = environ['PATH_INFO'].split('/')
+        booger.append("\npath:" + str(path))
         header.add('Content-Type', 'text/html')
 
         try:
         #check if path is in ROUTES get controller mapped to route
+            response = Response()
             for route in config.ROUTES:
-                url, mod_klass = route
-                module, klass = mod_klass.split('.', 1)
-                booger.append('url:%s'%url)
-                booger.append('controller script:%s'%module)
-                booger.append('klass:%s'%klass)
+                url = route[0]
+                module, klass = route[1].split('.', 1)
+                booger.append('\nurl:%s'%url)
+                booger.append('\ncontroller script:%s'%module)
+                booger.append('\nklass:%s'%klass)
                 if url == environ['PATH_INFO']:
                     if self._controller_exists(module + config.EXT):
                         if method.upper() in ('POST', 'GET'):
-                            booger.append('method:%s'%method)
+                            booger.append('\nmethod:%s'%method)
                             post_mortem = environ.get('wsgi.input', False)
                             post = dictify(post_mortem.read()) if post_mortem else {}
                             get = dictify(environ.get('QUERY_STRING', ''))
-                            booger.append('post:%s' %str(post))
-                            booger.append('QUERY_STRING:%s' %str(get))
+                            booger.append('\npost:%s' %str(post))
+                            booger.append('\nQUERY_STRING:%s' %str(get))
                         else:
                             raise HTTPRequestException('HTTP method is not supported only GET and POST is supported')
 
                         controller = self._get_controller(module, klass, path, post, get, {})
                         func = getattr(controller, method.lower())
-                        booger.append(str(func))                        
+                        booger.append('\nstr(func)' + str(func))                        
                         header.state('200 OK')
-                        response = func()
+                        response.add([func()])
                         # add an incrementing cookie, testing usge of Cookie module, have to remove this later
                         c = SimpleCookie(environ.get('HTTP_COOKIE',''))
                         try:
                             c['test'] = int(c['test'].value) + 1
                         except KeyError:
                             c['test'] = 0
-                        response += c['test'].value
+                        response.add(c['test'].value)
                         header.add('Set-Cookie', 'test='+c['test'].value)
                         break
 
@@ -155,11 +171,11 @@ class App(object):
             else:
                 log('path info:%s\nconfig.CONTROLLER_PATH:%s\nroutes: %s' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES)) )
                 header.state('404 Not Found')
-                response = _404()
+                response.add([_404()])
 
             start_response(header.status, header.headers)
             log('pykaboo rendered in approximately: %f' %(time()-start_time,))
-            return response
+            return response()
         except:
             # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
             from sys import exc_info
@@ -185,21 +201,21 @@ class App(object):
     def _get_controller(self, module, klass, path=None, post=None, get=None, cookies=None):
         '''create a controller object @see http://technogeek.org/python-module.html 
 @see http://docs.python.org/library/functions.html#__import__'''
-        booger.append('module arg:%s'%module)
-        booger.append('module, klass, path, post, get, cookies: %s, %s, %s, %s, %s, %s'%(module, klass, str(path), str(post), str(get), str(cookies)))
+        booger.append('\nmodule arg:%s'%module)
+        booger.append('\nmodule, klass, path, post, get, cookies: %s, %s, %s, %s, %s, %s'%(module, klass, str(path), str(post), str(get), str(cookies)))
         sys.path.append(config.CONTROLLER_PATH)
         __import__(module)
         controller_module = sys.modules[module]
-        booger.append('sys.modules:%s'%str(sys.modules))
-        booger.append('_get_controller():%s.%s'%(controller_module, klass))
+        booger.append('\nsys.modules:%s'%str(sys.modules))
+        booger.append('\n_get_controller():%s.%s'%(controller_module, klass))
         controller_klass = getattr(controller_module, klass)
-        booger.append('_get_controller():%s'%str(type(controller_klass)))
+        booger.append('\n_get_controller():%s'%str(type(controller_klass)))
         controller = controller_klass(path, post, get, cookies)
 
         return controller
 
 
-booger = []
+booger = ['<pre>']
 app = App()
 header = Header()
 application = app
