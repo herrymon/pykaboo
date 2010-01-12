@@ -17,12 +17,14 @@ class HTTPRequestException(Exception): pass
 
 if config.DEBUG:
     def log(msg):
-        dbg_file = config.LOG_PATH + 'debug_%d_%d_%d.txt'%(datetime.now().year,datetime.now().month, datetime.now().day)
-        fp = open(dbg_file, 'a+')
-        fp.write(msg + '\n')
-        fp.close()
+        import logging
+        now = datetime.now()
+        log_file = '%s%d_%d_%d.log' %(config.LOG_PATH, now.year, now.month, now.day)
+        logging.basicConfig(filename=log_file, level=logging.DEBUG)
+        logging.debug(msg)
 else:
-    def log(msg): pass
+    def log(msg): 
+        msg = None
 
 
 #utility functions
@@ -129,7 +131,6 @@ class App(object):
         method = environ['REQUEST_METHOD']
         path = environ['PATH_INFO'].split('/')
         booger.append("\npath:" + str(path))
-        header.add('Content-Type', 'text/html')
 
         try:
         #check if path is in ROUTES get controller mapped to route
@@ -155,6 +156,7 @@ class App(object):
                         controller = self._get_controller(module, klass, path, post, get, {})
                         func = getattr(controller, method.lower())
                         booger.append('\nstr(func)' + str(func))                        
+                        header.add('Content-Type', 'text/html')
                         header.state('200 OK')
                         response.add([func()])
                         # add an incrementing cookie, testing usge of Cookie module, have to remove this later
@@ -170,6 +172,7 @@ class App(object):
             # not in ROUTES
             else:
                 log('path info:%s\nconfig.CONTROLLER_PATH:%s\nroutes: %s' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES)) )
+                header.add('Content-Type', 'text/plain')
                 header.state('404 Not Found')
                 response.add([_404()])
 
@@ -206,7 +209,6 @@ class App(object):
         sys.path.append(config.CONTROLLER_PATH)
         __import__(module)
         controller_module = sys.modules[module]
-        booger.append('\nsys.modules:%s'%str(sys.modules))
         booger.append('\n_get_controller():%s.%s'%(controller_module, klass))
         controller_klass = getattr(controller_module, klass)
         booger.append('\n_get_controller():%s'%str(type(controller_klass)))
