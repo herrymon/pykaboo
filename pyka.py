@@ -87,6 +87,9 @@ wrapper for string.Template @see http://docs.python.org/library/string.html#temp
         from string import Template
         t = Template(self.html)
         try:
+            from cgi import escape
+            for key in values:
+                escape(values[key],'&<>')
             page = t.substitute(values)
         except KeyError:
             log('Template: Template key errors: %s' %str(values))
@@ -106,30 +109,39 @@ class Controller(object):
 
 
 class Header(object):
-    '''response header and status object, arg to start_response'''
-    def __init__(self, status='200 OK', headers=None):
-        self.status = status
-        if headers:
-            self.headers = headers
+    '''status object and response headers packed to use as arg to start_response()'''
+    def __init__(self, _status=None, _headers=None):
+        '''@usage start_response(*header.pack)'''
+        self.pack = []
+        if _status:
+            self.pack.append(_status)
         else:
-            self.headers = []
-        log('Header: Created header[status=%s, header=[%s]]' %(status, ','.join(self.headers)) )
+            self.pack.append('200 OK')
+        if _headers:
+            self.pack.append(_headers)
+        else:
+            self.pack.append([])
+        log('Header: Created header[status=%s, header=[%s]]' %(self.pack[0], ','.join(self.pack[1])) )
 
-    def state(self, status):
-        self.status = status
+    def state(self, _status):
+        '''@usage header.state('404 NOT FOUND')'''
+        self.pack[0] = _status
 
     def add(self, *args):
+        '''@usage header.add('Content-Type', 'text/html')'''
         if args:
-            self.headers.append(args)
-    
+            self.pack[1].append(args)
+
 
 class App(object):
     '''wsgi application wrapper, class is called as a func(tion)'''
     def __call__(self, environ, start_response):
         from time import time
         start_time = time()
-        method = environ['REQUEST_METHOD']
-        path = environ['PATH_INFO'].split('/')
+        method = environ.get('REQUEST_METHOD', None)
+        path_info = environ.get('PATH_INFO','')
+        path = path_info.split('/')
+        booger.append('<pre>')
         booger.append("\npath:" + str(path))
 
         try:
@@ -138,10 +150,8 @@ class App(object):
             for route in config.ROUTES:
                 url = route[0]
                 module, klass = route[1].split('.', 1)
-                booger.append('\nurl:%s'%url)
-                booger.append('\ncontroller script:%s'%module)
-                booger.append('\nklass:%s'%klass)
-                if url == environ['PATH_INFO']:
+                booger.append('\nurl:%s\ncontroller script:%s\nklass:%s'%(url, module, klass))
+                if url == path_info:
                     if self._controller_exists(module + config.EXT):
                         if method.upper() in ('POST', 'GET'):
                             booger.append('\nmethod:%s'%method)
@@ -171,12 +181,12 @@ class App(object):
 
             # not in ROUTES
             else:
-                log('path info:%s\nconfig.CONTROLLER_PATH:%s\nroutes: %s' %(environ['PATH_INFO'], config.CONTROLLER_PATH, str(config.ROUTES)) )
+                log('path info:%s\nconfig.CONTROLLER_PATH:%s\nroutes: %s' %(path_info, config.CONTROLLER_PATH, str(config.ROUTES)) )
                 header.add('Content-Type', 'text/plain')
                 header.state('404 Not Found')
                 response.add([_404()])
 
-            start_response(header.status, header.headers)
+            start_response(*header.pack)
             log('pykaboo rendered in approximately: %f' %(time()-start_time,))
             return response()
         except:
@@ -190,7 +200,7 @@ class App(object):
             traceback.append('boogers')
             traceback.extend(booger)
             header.state('500 INTERNAL SERVER ERROR')
-            start_response(header.status, header.headers)
+            start_response(*header.pack)
             return '<br/>'.join(traceback)
                 
     def _controller_exists(self, file):
@@ -217,7 +227,7 @@ class App(object):
         return controller
 
 
-booger = ['<pre>']
+booger = []
 app = App()
 header = Header()
 application = app
