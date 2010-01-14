@@ -56,6 +56,7 @@ def _404():
 
 #main components
 class Response(object):
+    '''use this for start_response'''
     def __init__(self):
         self.response = []
 
@@ -68,6 +69,45 @@ class Response(object):
             self.add(booger)
         return ''.join(self.response)
 
+
+class Request(object):
+    '''container of WSGI environ object'''
+    def __init__(self, _env):
+        self.method = _env.get('REQUEST_METHOD', None).lower()
+        self.post = self._post(_env.get('wsgi.input', None))
+        self.query_string = dictify(_env.get('QUERY_STRING',''))
+        self.cookie = SimpleCookie(_env.get('HTTP_COOKIE',''))
+        self.path_info = _env.get('PATH_INFO','')
+        self.path = self.path_info.split('/')
+        self._cookie()
+
+    def __str__(self):
+        return '''method: %s
+post: %s
+query_string: %s
+cookie: %s
+path_info: %s
+path: %s''' %(self.method, str(self.post), str(self.query_string), str(self.cookie), self.path_info, str(self.path)) 
+
+    def _method(self):
+        if not self.method.upper() in ('GET', 'POST'):
+            raise HTTPRequestException('HTTP method is not supported only GET and POST is supported')
+
+    def _post(self, _env_post):
+        _dict_post = {}
+        if _env_post:
+            _dict_post = dictify(_env_post.read())
+        else:
+            _dict_post = {}
+        return _dict_post
+
+    def _cookie(self):
+        # add an incrementing cookie, testing usge of Cookie module, have to improve this later
+        try:
+            self.cookie['pyka'] = int(self.cookie['pyka'].value) + 1
+        except KeyError:
+            self.cookie['pyka'] = 0
+        
 
 class Template(object):
     '''instantiate with filename of html template file. Do not forget to set TEMPLATE_PATH in config.py. 
@@ -101,10 +141,10 @@ wrapper for string.Template @see http://docs.python.org/library/string.html#temp
 class Controller(object):
     '''all your controllers inherit this. Do not forget to set CONTROLLERS_PATH in config.py'''
     def __init__(self, *args):
-        self.PATH, self.POST, self.GET, self.COOKIES = args
+        self.PATH, self.POST, self.QUERY_STRING, self.COOKIES = args
         booger.append('\nController.path' + str(self.PATH))
         booger.append('\nController.post' + str(self.POST))
-        booger.append('\nController.get' + str(self.GET))
+        booger.append('\nController.get' + str(self.QUERY_STRING))
         booger.append('\nController.cookies' + str(self.COOKIES))
 
 
@@ -138,57 +178,38 @@ class App(object):
     def __call__(self, environ, start_response):
         from time import time
         start_time = time()
-        method = environ.get('REQUEST_METHOD', None)
-        path_info = environ.get('PATH_INFO','')
-        path = path_info.split('/')
-        booger.append('<pre>')
-        booger.append("\npath:" + str(path))
+        req = Request(environ)
 
         try:
-        #check if path is in ROUTES get controller mapped to route
-            response = Response()
+            booger.append(str(req))
+            #check if path is in ROUTES get controller mapped to route
+            resp = Response()
             for route in config.ROUTES:
                 url = route[0]
                 module, klass = route[1].split('.', 1)
                 booger.append('\nurl:%s\ncontroller script:%s\nklass:%s'%(url, module, klass))
-                if url == path_info:
+                if url == req.path_info:
                     if self._controller_exists(module + config.EXT):
-                        if method.upper() in ('POST', 'GET'):
-                            booger.append('\nmethod:%s'%method)
-                            post_mortem = environ.get('wsgi.input', False)
-                            post = dictify(post_mortem.read()) if post_mortem else {}
-                            get = dictify(environ.get('QUERY_STRING', ''))
-                            booger.append('\npost:%s' %str(post))
-                            booger.append('\nQUERY_STRING:%s' %str(get))
-                        else:
-                            raise HTTPRequestException('HTTP method is not supported only GET and POST is supported')
-
-                        controller = self._get_controller(module, klass, path, post, get, {})
-                        func = getattr(controller, method.lower())
+                        # only supporting POST GET for now, have to read up about PUT DELETE HEAD and other mmethods
+                        controller = self._get_controller(module, klass, req.path, req.post, req.query_string, {})
+                        func = getattr(controller, req.method)
                         booger.append('\nstr(func)' + str(func))                        
                         header.add('Content-Type', 'text/html')
                         header.state('200 OK')
-                        response.add([func()])
-                        # add an incrementing cookie, testing usge of Cookie module, have to remove this later
-                        c = SimpleCookie(environ.get('HTTP_COOKIE',''))
-                        try:
-                            c['test'] = int(c['test'].value) + 1
-                        except KeyError:
-                            c['test'] = 0
-                        response.add(c['test'].value)
-                        header.add('Set-Cookie', 'test='+c['test'].value)
+                        header.add('Set-Cookie', 'pyka='+req.cookie['pyka'].value)
+                        resp.add([func()])
+                        resp.add(req.cookie['pyka'].value)
                         break
 
             # not in ROUTES
             else:
-                log('path info:%s\nconfig.CONTROLLER_PATH:%s\nroutes: %s' %(path_info, config.CONTROLLER_PATH, str(config.ROUTES)) )
                 header.add('Content-Type', 'text/plain')
                 header.state('404 Not Found')
-                response.add([_404()])
+                resp.add([_404()])
 
             start_response(*header.pack)
             log('pykaboo rendered in approximately: %f' %(time()-start_time,))
-            return response()
+            return resp()
         except:
             # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
             from sys import exc_info
