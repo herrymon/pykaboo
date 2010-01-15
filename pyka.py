@@ -1,6 +1,12 @@
-'''an attempt at a DIY wsgi framework, 
-inspired by: Ian Bicking tutorial @see http://pythonpaste.org/webob/do-it-yourself.html, web.py @see http://webpy.org/ and bottle.py @see http://github.com/defnull/bottle.
-MVC? sort of... ''' 
+'''an attempt at a tiny wsgi framework, 
+inspired by: Ian Bicking tutorial @see http://pythonpaste.org/webob/do-it-yourself.html, 
+
+Code concepts, ideas borrowed from:
+web.py @see http://webpy.org/
+bottle.py @see http://github.com/defnull/bottle.
+werkzeug @see http://werkzeug.pocoo.org/
+django @see http://www.djangoproject.com
+''' 
 
 __version__ = '0.1'
 __author__ = 'Erick :-) email: herrymonster@gmail.com'
@@ -57,17 +63,19 @@ def _404():
 #main components
 class Response(object):
     '''use this for start_response'''
-    def __init__(self):
+    def __init__(self, _request):
         self.response = []
+        self.request = _request
+        self.header = Header()
 
     def add(self, resp=None):
         self.response.extend(resp)
 
     def __call__(self):
-        if config.DEBUG:
-            booger.append('</pre>')
-            self.add(booger)
-        return ''.join(self.response)
+        if self.request.method == 'HEAD':
+            return ''
+        else:
+            return ''.join(self.response)
 
 
 class Request(object):
@@ -142,10 +150,6 @@ class Controller(object):
     '''all your controllers inherit this. Do not forget to set CONTROLLERS_PATH in config.py'''
     def __init__(self, *args):
         self.PATH, self.POST, self.QUERY_STRING, self.COOKIES = args
-        booger.append('\nController.path' + str(self.PATH))
-        booger.append('\nController.post' + str(self.POST))
-        booger.append('\nController.get' + str(self.QUERY_STRING))
-        booger.append('\nController.cookies' + str(self.COOKIES))
 
 
 class Header(object):
@@ -178,38 +182,40 @@ class App(object):
     def __call__(self, environ, start_response):
         from time import time
         start_time = time()
-        req = Request(environ)
 
         try:
-            booger.append(str(req))
             #check if path is in ROUTES get controller mapped to route
-            resp = Response()
+            req = Request(environ)
+            resp = Response(req)
+            response_echo = ''
+            booger = []
+            booger.append('<pre>')
+            booger.append(str(req))
             for route in config.ROUTES:
                 url = route[0]
                 module, klass = route[1].split('.', 1)
                 booger.append('\nurl:%s\ncontroller script:%s\nklass:%s'%(url, module, klass))
                 if url == req.path_info:
                     if self._controller_exists(module + config.EXT):
-                        # only supporting POST GET for now, have to read up about PUT DELETE HEAD and other mmethods
+                        # only supporting POST GET HEAD for now, have to read up about PUT DELETE HEAD OPTIONS and other methods
                         controller = self._get_controller(module, klass, req.path, req.post, req.query_string, {})
                         func = getattr(controller, req.method)
                         booger.append('\nstr(func)' + str(func))                        
-                        header.add('Content-Type', 'text/html')
-                        header.state('200 OK')
-                        header.add('Set-Cookie', 'pyka='+req.cookie['pyka'].value)
+                        resp.header.add('Content-Type', 'text/html')
+                        resp.header.state('200 OK')
+                        resp.header.add('Set-Cookie', 'pyka='+req.cookie['pyka'].value)
                         resp.add([func()])
                         resp.add(req.cookie['pyka'].value)
                         break
 
             # not in ROUTES
             else:
-                header.add('Content-Type', 'text/plain')
-                header.state('404 Not Found')
+                resp.header.add('Content-Type', 'text/plain')
+                resp.header.state('404 Not Found')
                 resp.add([_404()])
 
-            start_response(*header.pack)
-            log('pykaboo rendered in approximately: %f' %(time()-start_time,))
-            return resp()
+            #start_response(*header.pack)
+            response_echo = resp() + ''.join(booger)
         except:
             # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
             from sys import exc_info
@@ -220,9 +226,15 @@ class App(object):
             traceback.append('%s: %s' % (e_type.__name__, e_value))
             traceback.append('boogers')
             traceback.extend(booger)
-            header.state('500 INTERNAL SERVER ERROR')
-            start_response(*header.pack)
-            return '<br/>'.join(traceback)
+            resp.header.state('500 INTERNAL SERVER ERROR')
+            if config.DEBUG:
+                booger.append('</pre>')
+                resp.add(booger)
+            response_echo = '<br/>'.join(traceback) + ''.join(booger)
+        finally:
+            log('pykaboo rendered in approximately: %f' %(time()-start_time,))
+            start_response(*resp.header.pack)
+            yield response_echo
                 
     def _controller_exists(self, file):
         '''check if controller file exists in config.CONTROLLER_PATH'''
@@ -235,20 +247,14 @@ class App(object):
     def _get_controller(self, module, klass, path=None, post=None, get=None, cookies=None):
         '''create a controller object @see http://technogeek.org/python-module.html 
 @see http://docs.python.org/library/functions.html#__import__'''
-        booger.append('\nmodule arg:%s'%module)
-        booger.append('\nmodule, klass, path, post, get, cookies: %s, %s, %s, %s, %s, %s'%(module, klass, str(path), str(post), str(get), str(cookies)))
         sys.path.append(config.CONTROLLER_PATH)
         __import__(module)
         controller_module = sys.modules[module]
-        booger.append('\n_get_controller():%s.%s'%(controller_module, klass))
         controller_klass = getattr(controller_module, klass)
-        booger.append('\n_get_controller():%s'%str(type(controller_klass)))
         controller = controller_klass(path, post, get, cookies)
 
         return controller
 
 
-booger = []
 app = App()
-header = Header()
 application = app
