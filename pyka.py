@@ -68,14 +68,23 @@ class Response(object):
         self.request = _request
         self.header = Header()
 
-    def add(self, resp=None):
-        self.response.extend(resp)
-
-    def __call__(self):
+    def __call__(self, booger=None):
         if self.request.method == 'HEAD':
             return ''
         else:
+            if booger:
+                from cgi import escape
+                self.add('<pre>')
+                for b in booger:
+                    self.add([escape(b, '&<>')])
+                self.add('</pre>')
             return ''.join(self.response)
+
+    def add(self, resp=None):
+        self.response.extend(resp)
+
+    def cookie_header(self, cookie, key):
+        self.header.add('Set-Cookie', key + '=' + cookie[key].value)
 
 
 class Request(object):
@@ -87,10 +96,10 @@ class Request(object):
         self.cookie = SimpleCookie(_env.get('HTTP_COOKIE',''))
         self.path_info = _env.get('PATH_INFO','')
         self.path = self.path_info.split('/')
-        self._cookie()
 
     def __str__(self):
-        return '''method: %s
+        return \
+'''method: %s
 post: %s
 query_string: %s
 cookie: %s
@@ -109,13 +118,22 @@ path: %s''' %(self.method, str(self.post), str(self.query_string), str(self.cook
             _dict_post = {}
         return _dict_post
 
-    def _cookie(self):
-        # add an incrementing cookie, testing usge of Cookie module, have to improve this later
-        try:
-            self.cookie['pyka'] = int(self.cookie['pyka'].value) + 1
-        except KeyError:
-            self.cookie['pyka'] = 0
-        
+    def cookie_set(self, key, val, default, append=None):
+        '''if COOKIE[key] exists set COOKIE[key] to val, else COOKIE[key] = default'''
+        prev_val = self.cookie.get(key, None)
+        if prev_val:
+            if append:
+                ''' to support int increment, for now'''
+                if isinstance(val, int):
+                    self.cookie[key] = int(self.cookie[key].value) + val
+                else:
+                    self.cookie[key] = self.cookie[key].value + val
+            else:
+                self.cookie[key] = val
+        else:
+            self.cookie[key] = default
+
+
 
 class Template(object):
     '''instantiate with filename of html template file. Do not forget to set TEMPLATE_PATH in config.py. 
@@ -189,7 +207,6 @@ class App(object):
             resp = Response(req)
             response_echo = ''
             booger = []
-            booger.append('<pre>')
             booger.append(str(req))
             for route in config.ROUTES:
                 url = route[0]
@@ -201,11 +218,12 @@ class App(object):
                         controller = self._get_controller(module, klass, req.path, req.post, req.query_string, {})
                         func = getattr(controller, req.method)
                         booger.append('\nstr(func)' + str(func))                        
+                        req.cookie_set('pykiee', 1, 0, True)
+                        resp.cookie_header(req.cookie, 'pykiee')
                         resp.header.add('Content-Type', 'text/html')
                         resp.header.state('200 OK')
-                        resp.header.add('Set-Cookie', 'pyka='+req.cookie['pyka'].value)
                         resp.add([func()])
-                        resp.add(req.cookie['pyka'].value)
+                        resp.add(req.cookie['pykiee'].value)
                         break
 
             # not in ROUTES
@@ -214,8 +232,7 @@ class App(object):
                 resp.header.state('404 Not Found')
                 resp.add([_404()])
 
-            #start_response(*header.pack)
-            response_echo = resp() + ''.join(booger)
+            response_echo = resp(booger)
         except:
             # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
             from sys import exc_info
@@ -228,7 +245,6 @@ class App(object):
             traceback.extend(booger)
             resp.header.state('500 INTERNAL SERVER ERROR')
             if config.DEBUG:
-                booger.append('</pre>')
                 resp.add(booger)
             response_echo = '<br/>'.join(traceback) + ''.join(booger)
         finally:
@@ -245,7 +261,8 @@ class App(object):
         return os.path.isfile(controller_file)
 
     def _get_controller(self, module, klass, path=None, post=None, get=None, cookies=None):
-        '''create a controller object @see http://technogeek.org/python-module.html 
+        '''create a controller object 
+@see http://technogeek.org/python-module.html 
 @see http://docs.python.org/library/functions.html#__import__'''
         sys.path.append(config.CONTROLLER_PATH)
         __import__(module)
