@@ -1,5 +1,7 @@
 '''an attempt at a tiny wsgi framework, 
-inspired by: Ian Bicking tutorial @see http://pythonpaste.org/webob/do-it-yourself.html, 
+inspired by:
+Ian Bicking tutorial @see http://pythonpaste.org/webob/do-it-yourself.html, 
+codepoint tutorial @see http://webpython.codepoint.net/wsgi_tutorial
 
 Code concepts, ideas borrowed from:
 web.py @see http://webpy.org/
@@ -35,25 +37,14 @@ else:
 
 #utility functions
 def dictify(input_text):
-    '''convert wsgi.input to {}
+    '''convert wsgi.input to {}, uses built-in urlparse module
 Eg name=Erick&time=11pm to {'name': ['Erick'], 'time': ['11pm']}
 '''
     log('xutils.dictify: %d %s' %(len(input_text), input_text))
-    dict = {}
-    if input_text:
-        post = input_text.split('&')
-        for val in post:
-            key, value = val.split('=')
-            #what if we need the space later? edge case?
-            #tried this without strip() space is replaced by '+', I have to google that
-            value = value.strip()
+    from urlparse import parse_qs
+    from cgi import escape
+    dict_input = parse_qs(input_text)
 
-            if dict.has_key(key):
-                if not isinstance(dict[key], list):
-                    dict[key] = [dict[key]]
-                dict[key].append(value) #keep adding for array type inputs 
-            else:
-                dict[key] = value
     return dict
 
 def _404():
@@ -90,6 +81,7 @@ class Response(object):
 class Request(object):
     '''container of WSGI environ object'''
     def __init__(self, _env):
+        self.content_length = _env.get('CONTENT_LENGTH',0)
         self.method = _env.get('REQUEST_METHOD', None).lower()
         self.post = self._post(_env.get('wsgi.input', None))
         self.query_string = dictify(_env.get('QUERY_STRING',''))
@@ -113,7 +105,7 @@ path: %s''' %(self.method, str(self.post), str(self.query_string), str(self.cook
     def _post(self, _env_post):
         _dict_post = {}
         if _env_post:
-            _dict_post = dictify(_env_post.read())
+            _dict_post = dictify(_env_post.read(self.content_length))
         else:
             _dict_post = {}
         return _dict_post
@@ -200,11 +192,11 @@ class App(object):
     def __call__(self, environ, start_response):
         from time import time
         start_time = time()
+        req = Request(environ)
+        resp = Response(req)
 
         try:
             #check if path is in ROUTES get controller mapped to route
-            req = Request(environ)
-            resp = Response(req)
             response_echo = ''
             booger = []
             booger.append(str(req))
