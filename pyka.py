@@ -44,8 +44,10 @@ Eg name=Erick&time=11pm to {'name': ['Erick'], 'time': ['11pm']}
     from urlparse import parse_qs
     from cgi import escape
     dict_input = parse_qs(input_text)
-
-    return dict
+    # use cgi.escape built-in to escape "&<>" from GET and POST, or other inputs
+    for key in dict_input:
+       dict_input[key] = [escape(val) for val in dict_input[key]]
+    return dict_input
 
 def _404():
     '''no route found, put a Template here'''
@@ -67,7 +69,7 @@ class Response(object):
                 from cgi import escape
                 self.add('<pre>')
                 for b in booger:
-                    self.add([escape(b, '&<>')])
+                    self.add([escape(b)])
                 self.add('</pre>')
             return ''.join(self.response)
 
@@ -81,9 +83,9 @@ class Response(object):
 class Request(object):
     '''container of WSGI environ object'''
     def __init__(self, _env):
-        self.content_length = _env.get('CONTENT_LENGTH',0)
         self.method = _env.get('REQUEST_METHOD', None).lower()
-        self.post = self._post(_env.get('wsgi.input', None))
+        self.content_length = _env.get('CONTENT_LENGTH',0)
+        self.post = self._post(_env.get('wsgi.input', ''))
         self.query_string = dictify(_env.get('QUERY_STRING',''))
         self.cookie = SimpleCookie(_env.get('HTTP_COOKIE',''))
         self.path_info = _env.get('PATH_INFO','')
@@ -103,23 +105,20 @@ path: %s''' %(self.method, str(self.post), str(self.query_string), str(self.cook
             raise HTTPRequestException('HTTP method is not supported only GET and POST is supported')
 
     def _post(self, _env_post):
-        _dict_post = {}
         if _env_post:
             _dict_post = dictify(_env_post.read(self.content_length))
         else:
             _dict_post = {}
         return _dict_post
 
-    def cookie_set(self, key, val, default, append=None):
+    def cookie_set(self, key, val, default, add_to=None):
         '''if COOKIE[key] exists set COOKIE[key] to val, else COOKIE[key] = default'''
         prev_val = self.cookie.get(key, None)
         if prev_val:
-            if append:
+            if add_to:
                 ''' to support int increment, for now'''
                 if isinstance(val, int):
                     self.cookie[key] = int(self.cookie[key].value) + val
-                else:
-                    self.cookie[key] = self.cookie[key].value + val
             else:
                 self.cookie[key] = val
         else:
@@ -147,7 +146,7 @@ wrapper for string.Template @see http://docs.python.org/library/string.html#temp
         try:
             from cgi import escape
             for key in values:
-                escape(values[key],'&<>')
+                escape(values[key])
             page = t.substitute(values)
         except KeyError:
             log('Template: Template key errors: %s' %str(values))
@@ -157,7 +156,7 @@ wrapper for string.Template @see http://docs.python.org/library/string.html#temp
 
 
 class Controller(object):
-    '''all your controllers inherit this. Do not forget to set CONTROLLERS_PATH in config.py'''
+    '''all controllers inherit Controller. Do not forget to set CONTROLLERS_PATH in config.py'''
     def __init__(self, *args):
         self.PATH, self.POST, self.QUERY_STRING, self.COOKIES = args
 
@@ -166,11 +165,10 @@ class Header(object):
     '''status object and response headers packed to use as arg to start_response()'''
     def __init__(self, _status=None, _headers=None):
         '''@usage start_response(*header.pack)'''
-        self.pack = []
         if _status:
-            self.pack.append(_status)
+            self.pack = [_status]
         else:
-            self.pack.append('200 OK')
+            self.pack = ['200 OK']
         if _headers:
             self.pack.append(_headers)
         else:
@@ -198,8 +196,7 @@ class App(object):
         try:
             #check if path is in ROUTES get controller mapped to route
             response_echo = ''
-            booger = []
-            booger.append(str(req))
+            booger = [str(req)]
             for route in config.ROUTES:
                 url = route[0]
                 module, klass = route[1].split('.', 1)
@@ -218,7 +215,7 @@ class App(object):
                         resp.add(req.cookie['pykiee'].value)
                         break
 
-            # not in ROUTES
+            # not in ROUTES, no break encountered
             else:
                 resp.header.add('Content-Type', 'text/plain')
                 resp.header.state('404 Not Found')
