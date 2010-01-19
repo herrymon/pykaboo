@@ -17,11 +17,11 @@ __license__ = 'do whatever you want Ie use at your own risk'
 import os, sys
 sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
 import config
-from Cookie import SimpleCookie
 from datetime import datetime
 
 '''errors and logger'''
 class HTTPRequestException(Exception): pass
+class TemplateNotFoundException(Exception): pass
 
 if config.DEBUG:
     def log(msg):
@@ -59,9 +59,8 @@ class Response(object):
     def __init__(self, _request):
         self.response = []
         self.request = _request
-        self.header = Header('200 OK', ('Content-Type', 'text/html'))
         # add default headers
-        # self.header.add('Content-Type','text/html')
+        self.header = Header('200 OK', ('Content-Type', 'text/html'))
 
     def __call__(self, booger=None):
         if self.request.method == 'HEAD':
@@ -89,9 +88,11 @@ class Request(object):
         self.content_length = _env.get('CONTENT_LENGTH',0)
         self.post = self._post(_env.get('wsgi.input', ''))
         self.query_string = dictify(_env.get('QUERY_STRING',''))
-        self.cookie = SimpleCookie(_env.get('HTTP_COOKIE',''))
         self.path_info = _env.get('PATH_INFO','')
         self.path = self.path_info.split('/')
+
+        from Cookie import SimpleCookie
+        self.cookie = SimpleCookie(_env.get('HTTP_COOKIE',''))
 
     def __str__(self):
         return \
@@ -104,7 +105,7 @@ path: %s''' %(self.method, str(self.post), str(self.query_string), str(self.cook
 
     def _method(self):
         if not self.method.upper() in ('GET', 'POST'):
-            raise HTTPRequestException('HTTP method is not supported only GET and POST is supported')
+            raise HTTPRequestException('HTTP method is not supported. Only GET and POST is supported at the moment...')
 
     def _post(self, _env_post):
         if _env_post:
@@ -115,8 +116,7 @@ path: %s''' %(self.method, str(self.post), str(self.query_string), str(self.cook
 
     def cookie_set(self, key, val, default, add_to=None):
         '''if COOKIE[key] exists set COOKIE[key] to val, else COOKIE[key] = default'''
-        prev_val = self.cookie.get(key, None)
-        if prev_val:
+        if self.cookie.get(key, None):
             if add_to:
                 ''' to support int increment, for now'''
                 if isinstance(val, int):
@@ -139,8 +139,7 @@ wrapper for string.Template @see http://docs.python.org/library/string.html#temp
             self.html = fp.read()
             fp.close()
         except IOError:
-            log('Template: Template file not found/read: %s' %tpl)
-            self.html = 'Template: Template not found %s' %tpl
+            raise TemplateNotFoundException('Template file not found: %s' %tpl)
             
     def render(self, values={}):
         from string import Template
