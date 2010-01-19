@@ -59,7 +59,9 @@ class Response(object):
     def __init__(self, _request):
         self.response = []
         self.request = _request
-        self.header = Header()
+        self.header = Header('200 OK', ('Content-Type', 'text/html'))
+        # add default headers
+        # self.header.add('Content-Type','text/html')
 
     def __call__(self, booger=None):
         if self.request.method == 'HEAD':
@@ -163,17 +165,12 @@ class Controller(object):
 
 class Header(object):
     '''status object and response headers packed to use as arg to start_response()'''
-    def __init__(self, _status=None, _headers=None):
+    def __init__(self, _status, _header):
         '''@usage start_response(*header.pack)'''
-        if _status:
-            self.pack = [_status]
-        else:
-            self.pack = ['200 OK']
-        if _headers:
-            self.pack.append(_headers)
-        else:
-            self.pack.append([])
-        log('Header: Created header[status=%s, header=[%s]]' %(self.pack[0], ','.join(self.pack[1])) )
+        self.pack = []
+        self.pack.append(_status)
+        self.pack.append([_header])
+        log('Header: Created header[status=%s, header=[%s]]' %(self.pack[0], str(self.pack[1])) )
 
     def state(self, _status):
         '''@usage header.state('404 NOT FOUND')'''
@@ -209,15 +206,12 @@ class App(object):
                         booger.append('\nstr(func)' + str(func))                        
                         req.cookie_set('pykiee', 1, 0, True)
                         resp.cookie_header(req.cookie, 'pykiee')
-                        resp.header.add('Content-Type', 'text/html')
-                        resp.header.state('200 OK')
                         resp.add([func()])
                         resp.add(req.cookie['pykiee'].value)
                         break
 
             # not in ROUTES, no break encountered
             else:
-                resp.header.add('Content-Type', 'text/plain')
                 resp.header.state('404 Not Found')
                 resp.add([_404()])
 
