@@ -77,8 +77,9 @@ class Response(object):
     def add(self, resp=None):
         self.response.extend(resp)
 
-    def cookie_header(self, cookie, key):
-        self.header.add('Set-Cookie', key + '=' + cookie[key].value)
+    def cookie_header(self, cookie, keys):
+        for key in keys:
+            self.header.add('Set-Cookie', key + '=' + cookie[key].value)
 
 
 class Request(object):
@@ -202,11 +203,12 @@ class App(object):
                         # only supporting POST GET HEAD for now, have to read up about PUT DELETE HEAD OPTIONS and other methods
                         controller = self._get_controller(module, klass, req)
                         func = getattr(controller, req.method)
-                        booger.append('\nstr(func)' + str(func))                        
-                        req.cookie_set('pykiee', 1, 0, True)
-                        resp.cookie_header(req.cookie, 'pykiee')
+                        resp.add(str(req.cookie.keys()))
                         resp.add([func()])
-                        resp.add(req.cookie['pykiee'].value)
+                        booger.append('\nstr(func)' + str(func))                        
+                        resp.cookie_header(req.cookie, req.cookie.keys())
+
+                        # break from route loop
                         break
 
             # not in ROUTES, no break encountered
