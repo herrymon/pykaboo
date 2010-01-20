@@ -158,8 +158,8 @@ wrapper for string.Template @see http://docs.python.org/library/string.html#temp
 
 class Controller(object):
     '''all controllers inherit Controller. Do not forget to set CONTROLLERS_PATH in config.py'''
-    def __init__(self, *args):
-        self.PATH, self.POST, self.QUERY_STRING, self.COOKIES = args
+    def __init__(self, _request):
+        self.request = _request
 
 
 class Header(object):
@@ -200,7 +200,7 @@ class App(object):
                 if url == req.path_info:
                     if self._controller_exists(module + config.EXT):
                         # only supporting POST GET HEAD for now, have to read up about PUT DELETE HEAD OPTIONS and other methods
-                        controller = self._get_controller(module, klass, req.path, req.post, req.query_string, {})
+                        controller = self._get_controller(module, klass, req)
                         func = getattr(controller, req.method)
                         booger.append('\nstr(func)' + str(func))                        
                         req.cookie_set('pykiee', 1, 0, True)
@@ -242,7 +242,7 @@ class App(object):
             controller_file = os.path.dirname(__file__) + '/' + file
         return os.path.isfile(controller_file)
 
-    def _get_controller(self, module, klass, path=None, post=None, get=None, cookies=None):
+    def _get_controller(self, module, klass, req):
         '''create a controller object 
 @see http://technogeek.org/python-module.html 
 @see http://docs.python.org/library/functions.html#__import__'''
@@ -250,7 +250,7 @@ class App(object):
         __import__(module)
         controller_module = sys.modules[module]
         controller_klass = getattr(controller_module, klass)
-        controller = controller_klass(path, post, get, cookies)
+        controller = controller_klass(req)
 
         return controller
 
