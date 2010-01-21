@@ -106,16 +106,34 @@ class Response(object):
 class Request(object):
     '''container of WSGI environ object'''
     def __init__(self, _env):
-        self.method = _env.get('REQUEST_METHOD', None).lower()
+        self.environ = _env
         self.content_length = _env.get('CONTENT_LENGTH',0)
-        self.post = self._post(_env.get('wsgi.input', ''))
-        self.query_string = dictify(_env.get('QUERY_STRING',''))
         self.path_info = _env.get('PATH_INFO','')
         self.path = self.path_info.split('/')
-
         from Cookie import SimpleCookie
         self.cookie = SimpleCookie(_env.get('HTTP_COOKIE',''))
 
+    @property
+    def method(self):
+        _supported_methods = ('GET', 'POST')
+        _method = self.environ.get('REQUEST_METHOD', None)
+        if _method and _method in _supported_methods:
+            return _method.lower()
+        else:
+            raise HTTPRequestException('method is not supported. Only GET and POST is supported at the moment...')
+
+    @property
+    def post(self):
+        _post = self.environ.get('wsgi.input','')
+        if _post:
+            return dictify(_post.read(self.content_length))
+        else:
+            return {}
+
+    @property
+    def query_string(self):
+        return dictify(self.environ.get('QUERY_STRING',''))
+        
     def __str__(self):
         return \
 '''method: %s
@@ -124,17 +142,6 @@ query_string: %s
 cookie: %s
 path_info: %s
 path: %s''' %(self.method, str(self.post), str(self.query_string), str(self.cookie), self.path_info, str(self.path)) 
-
-    def _method(self):
-        if not self.method.upper() in ('GET', 'POST'):
-            raise HTTPRequestException('HTTP method is not supported. Only GET and POST is supported at the moment...')
-
-    def _post(self, _env_post):
-        if _env_post:
-            _dict_post = dictify(_env_post.read(self.content_length))
-        else:
-            _dict_post = {}
-        return _dict_post
 
     def cookie_set(self, key, val, default, add_to=None):
         '''if COOKIE[key] exists set COOKIE[key] to val, else COOKIE[key] = default'''
