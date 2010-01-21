@@ -50,8 +50,29 @@ Eg name=Erick&time=11pm to {'name': ['Erick'], 'time': ['11pm']}
     return dict_input
 
 def _404():
-    '''no route found, put a Template here'''
+    '''no route found'''
+    # put a Template here
     return 'Page not found'
+
+# Database class
+class Database(object):
+    '''interface to rdbms'''
+    def _connect(self):
+        '''returns a connection cursor'''
+        if config.DATABASE_DRIVER == 'sqlite':
+            import sqlite3
+            conn = sqlite3.connect(config.DATABASE)
+            cursor = conn.cursor()
+        return cursor
+
+    def _sqlite(self, _query):
+        pass        
+
+    def query(self, _query):
+        cursor = self._connect()
+        if config.DATABASE_DRIVER == 'sqlite':
+            cursor.execute(_query)
+            return cursor.fetchall()
 
 #main components
 class Response(object):
