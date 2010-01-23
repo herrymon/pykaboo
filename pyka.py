@@ -240,10 +240,10 @@ class App(object):
     def __call__(self, environ, start_response):
         from time import time
         start_time = time()
-        req = Request(environ)
-        resp = Response(req)
 
         try:
+            req = Request(environ)
+            resp = Response(req)
             #check if path is in ROUTES get controller mapped to route
             response_echo = ''
             booger = ['\n****Request object****\n']
