@@ -42,7 +42,8 @@ else:
 #utility functions
 def dictify(input_text):
     '''convert wsgi.input to {}, uses built-in urlparse module
-Eg name=Erick&pets=rat&pets=cats to {'name': 'Erick', 'pets': ['rats', 'cats']}
+Eg name=Erick&pets=rat&pets=cats to {'name': ['Erick'], 'pets': ['rats', 'cats']}
+Note: all values are lists
 '''
     log('xutils.dictify: %d %s' %(len(input_text), input_text))
     from urlparse import parse_qs
@@ -92,13 +93,16 @@ class Response(object):
             return ''
         else:
             if booger and config.DEBUG:
+                booger.append('\nself.request.POST.keys()'+','.join(self.request.post.keys()))
                 from cgi import escape
                 self.add('<pre style="background:#fdd;border:1px solid #ecc;margin:0;padding:1em">')
                 self.add('<h3 style="margin:0;padding:0.2em;line-height:1.5em;background:#800;color:#fff">config.DEBUG is on, turn off debugging to hide this box</h3>')
                 for b in booger:
                     self.add([escape(b)])
                 self.add('</pre>')
-            return ''.join(self.response)
+            _response = ''.join(self.response)
+            #self.header.add('Content-Length', str(len(_response)))
+            return _response
 
     def add(self, resp=None):
         self.response.extend(resp)
@@ -112,20 +116,21 @@ class Request(object):
     '''container of WSGI environ object'''
     def __init__(self, _env):
         self.environ = _env
-        self.content_length = self.environ.get('CONTENT_LENGTH',0)
-        self.path_info = self.environ.get('PATH_INFO','')
+        self.content_length = self.environ.get('CONTENT_LENGTH', '0')
+        self.path_info = self.environ.get('PATH_INFO', '')
         self.path = self.path_info.split('/')
         self._post_cache()
         from Cookie import SimpleCookie
-        self.cookie = SimpleCookie(self.environ.get('HTTP_COOKIE',''))
+        self.cookie = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
 
     def _post_cache(self):
-        '''on __init__ , wsgi.input must be read, otherwise I'm getting empty wsgi.input'''
-        input = self.environ.get('wsgi.input','')
-        if input:
-            self.post_cache = input.read()
-        else:
-            self.post_cache = ''
+        '''on __init__ , wsgi.input must be read/cached, otherwise I'm getting empty wsgi.input'''
+        self.post_cache = ''
+        if self.environ.get('REQUEST_METHOD') == 'POST':
+            if self.environ.get('wsgi.input',''):
+                from cStringIO import StringIO
+                body = StringIO(self.environ.get('wsgi.input').read(int(self.content_length)))
+                self.post_cache = body.read()
 
     @property
     def method(self):
@@ -206,6 +211,10 @@ class Controller(object):
     def POST(self):
         return self.request.post
 
+    @property
+    def QUERY_STRING(self):
+        return self.request.query_string
+
 
 class Header(object):
     '''status object and response headers packed to use as arg to start_response()'''
@@ -231,10 +240,10 @@ class App(object):
     def __call__(self, environ, start_response):
         from time import time
         start_time = time()
+        req = Request(environ)
+        resp = Response(req)
 
         try:
-            req = Request(environ)
-            resp = Response(req)
             #check if path is in ROUTES get controller mapped to route
             response_echo = ''
             booger = ['\n****Request object****\n']
@@ -261,7 +270,7 @@ class App(object):
                 resp.header.state('404 Not Found')
                 resp.add([_404()])
 
-            response_echo = resp(booger)
+            response_echo += resp(booger)
         except:
             # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
             booger = []
@@ -280,7 +289,7 @@ class App(object):
         finally:
             log('pykaboo rendered in approximately: %f' %(time()-start_time,))
             start_response(*resp.header.pack[:2])
-            yield response_echo
+            return list(response_echo)
                 
     def _controller_exists(self, file):
         '''check if controller file exists in config.CONTROLLER_PATH'''
@@ -305,3 +314,12 @@ class App(object):
 
 app = App()
 application = app
+
+if __name__ == '__main__':
+    from wsgiref.validate import validator
+    from wsgiref.simple_server import make_server
+    httpd = make_server('', 8888, validator(app))
+    
+    print "Serving on port 8888..."
+    httpd.serve_forever()
+
