@@ -1,24 +1,39 @@
-'''an attempt at a tiny wsgi framework, 
-inspired by:
-Ian Bicking tutorial @see http://pythonpaste.org/webob/do-it-yourself.html, 
-codepoint tutorial @see http://webpython.codepoint.net/wsgi_tutorial
+'''
+desc:
+an attempt at a tiny wsgi framework, 
+status: barely usable
 
-Code concepts, ideas borrowed from:
-web.py @see http://webpy.org/
-bottle.py @see http://github.com/defnull/bottle.
-webob @see http://bitbucket.org/ianb/webob/ 
-werkzeug @see http://werkzeug.pocoo.org/
-django @see http://www.djangoproject.com
+inspired by:
+Ian Bicking tutorial - http://pythonpaste.org/webob/do-it-yourself.html, 
+codepoint tutorial - http://webpython.codepoint.net/wsgi_tutorial
+
+concepts, ideas borrowed from:
+webob - http://bitbucket.org/ianb/webob/ 
+werkzeug - http://werkzeug.pocoo.org/
+bottle.py - http://github.com/defnull/bottle.
+web.py - http://webpy.org/
+django - http://www.djangoproject.com
+
+bookmarks:
+http1.1 - http://www.w3.org/Protocols/rfc2616/rfc2616.html
+PEP 333 - http://www.python.org/dev/peps/pep-0333/ 
+wsgiref module, (wsgiref.validate) - http://docs.python.org/library/wsgiref.html
+cgi module - http://docs.python.org/library/cgi.html
+urlparse module - http://docs.python.org/library/urlparse.html 
+Cookie module - http://docs.python.org/library/cookie.html 
+
+notes:
+dev runs on python 2.6.4, 
+apache with mod_wsgi/wsgiref.simple_server
 ''' 
 
 __version__ = '0.1'
-__author__ = 'Erick :-) email: herrymonster@gmail.com'
-__license__ = 'do whatever you want Ie use at your own risk'
+__author__ = 'herrymonster@gmail.com'
+__license__ = 'do whatever you want, Ie use at your own risk'
 
 import os, sys
 sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
 import config
-from datetime import datetime
 
 '''constants'''
 EXT = '.py'
@@ -27,11 +42,12 @@ EXT = '.py'
 class HTTPRequestException(Exception): pass
 class TemplateNotFoundException(Exception): pass
 
-if config.DEBUG:
+if config.LOG:
     def log(msg):
+        from datetime import datetime
         import logging
         now = datetime.now()
-        log_file = '%s%d_%d_%d.log' %(config.LOG_PATH, now.year, now.month, now.day)
+        log_file = '{path}log-{year}-{month}-{day}.log'.format(path=config.LOG_PATH, year=now.year, month=now.month, day=now.day)
         logging.basicConfig(filename=log_file, level=logging.DEBUG)
         logging.debug(msg)
 else:
@@ -41,10 +57,11 @@ else:
 
 #utility functions
 def dictify(input_text):
-    '''convert wsgi.input to {}, uses built-in urlparse module
-Eg name=Erick&pets=rat&pets=cats to {'name': ['Erick'], 'pets': ['rats', 'cats']}
-Note: all values are lists
-'''
+    """
+    convert wsgi.input to {}, uses built-in urlparse module
+    Eg name=Erick&pets=rat&pets=cats to {'name': ['Erick'], 'pets': ['rats', 'cats']}
+    Note: all values are lists
+"""
     log('xutils.dictify: %d %s' %(len(input_text), input_text))
     from urlparse import parse_qs
     from cgi import escape
@@ -56,12 +73,15 @@ Note: all values are lists
 
 def _404():
     '''no route found'''
-    # put a Template here
+    # @TODO put a Template here
     return 'Page not found'
 
 # Database class
 class Database(object):
-    '''interface to rdbms'''
+    """
+    a simple interface to rdbms, 
+    supports only sqlite for now
+"""
     def _connect(self):
         '''returns a connection cursor'''
         if config.DATABASE_DRIVER == 'sqlite':
@@ -69,9 +89,6 @@ class Database(object):
             conn = sqlite3.connect(config.DATABASE)
             cursor = conn.cursor()
         return cursor
-
-    def _sqlite(self, _query):
-        pass        
 
     def query(self, _query):
         cursor = self._connect()
@@ -81,7 +98,10 @@ class Database(object):
 
 #main components
 class Response(object):
-    '''use this for start_response'''
+    """
+    wsgi Response, wraps a Request object,
+    use this for start_response
+"""
     def __init__(self, _request):
         self.response = []
         self.request = _request
@@ -92,7 +112,9 @@ class Response(object):
         if self.request.method == 'HEAD':
             return ''
         else:
-            if booger and config.DEBUG:
+            # red box that appears at bottom of page if config.DEBUG is True
+            is_debug = booger and config.DEBUG
+            if is_debug:
                 booger.append('\nself.request.POST.keys()'+','.join(self.request.post.keys()))
                 from cgi import escape
                 self.add('<pre style="background:#fdd;border:1px solid #ecc;margin:0;padding:1em">')
@@ -101,15 +123,15 @@ class Response(object):
                     self.add([escape(b)])
                 self.add('</pre>')
             _response = ''.join(self.response)
-            #self.header.add('Content-Length', str(len(_response)))
             return _response
 
     def add(self, resp=None):
+        """add list to response output"""
         self.response.extend(resp)
 
     def cookie_header(self, cookie, keys):
         for key in keys:
-            self.header.add('Set-Cookie', key + '=' + cookie[key].value)
+            self.header.add('Set-Cookie', '{0}={1}'.format(key, cookie[key].value))
 
 
 class Request(object):
@@ -123,8 +145,10 @@ class Request(object):
         from Cookie import SimpleCookie
         self.cookie = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
 
+    # on __init__ , wsgi.input must be read/cached, 
+    # otherwise I'm getting empty wsgi.input
     def _post_cache(self):
-        '''on __init__ , wsgi.input must be read/cached, otherwise I'm getting empty wsgi.input'''
+        """cache content of wsgi.input on __init__"""
         self.post_cache = ''
         if self.environ.get('REQUEST_METHOD') == 'POST':
             if self.environ.get('wsgi.input',''):
@@ -151,21 +175,25 @@ class Request(object):
         
     @property
     def debug(self):
-        ''' string representation of environ params, for debugging purposes :)'''
-        return \
-'''method: %s
-post: %s
-query_string: %s
-cookie: %s
-path_info: %s
-path: %s''' %(self.method, str(self.post), str(self.query_string), str(self.cookie), self.path_info, str(self.path)) 
+        """string representation of Request attributes"""
+        return """
+            method: {meth}
+            post: {post}
+            query_string: {qs} 
+            cookie: {cook} 
+            path_info: {pi}
+            path: {pth}""".format(
+                            meth=self.method, post=str(self.post), qs=str(self.query_string), cook=str(self.cookie), pi=self.path_info, pth=str(self.path)
+        ) 
 
     def cookie_set(self, key, val, default, add_to=None):
         '''if COOKIE[key] exists set COOKIE[key] to val, else COOKIE[key] = default'''
-        if self.cookie.get(key, None):
+        has_cookie = self.cookie.get(key, None)
+        is_number = isinstance(val, int)
+        if has_cookie:
             if add_to:
                 ''' to support int increment, for now'''
-                if isinstance(val, int):
+                if is_number:
                     self.cookie[key] = int(self.cookie[key].value) + val
             else:
                 self.cookie[key] = val
@@ -175,8 +203,10 @@ path: %s''' %(self.method, str(self.post), str(self.query_string), str(self.cook
 
 
 class Template(object):
-    '''instantiate with filename of html template file. Do not forget to set TEMPLATE_PATH in config.py. 
-wrapper for string.Template @see http://docs.python.org/library/string.html#template-strings'''
+    """
+    instantiate with filename of html template file. Do not forget to set TEMPLATE_PATH in config.py. 
+    wrapper for string.Template @see http://docs.python.org/library/string.html#template-strings
+"""
     def __init__(self, tfile, echo=True):
         try:
             self.echo = echo
@@ -203,7 +233,9 @@ wrapper for string.Template @see http://docs.python.org/library/string.html#temp
 
 
 class Controller(object):
-    '''all controllers inherit Controller. Do not forget to set CONTROLLERS_PATH in config.py'''
+    """
+    All controllers inherit Controller. Do not forget to set CONTROLLERS_PATH in config.py
+"""
     def __init__(self, _request):
         self.request = _request
 
@@ -217,7 +249,9 @@ class Controller(object):
 
 
 class Header(object):
-    '''status object and response headers packed to use as arg to start_response()'''
+    """
+    status object and response headers packed to use as arg to start_response()
+"""
     def __init__(self, _status, _header):
         '''@usage start_response(*header.pack)'''
         self.pack = []
@@ -236,18 +270,22 @@ class Header(object):
 
 
 class App(object):
-    '''wsgi application wrapper, class is called as a func(tion)'''
+    """
+    wsgi application wrapper, class is called as a func(tion)
+"""
     def __call__(self, environ, start_response):
         from time import time
         start_time = time()
 
         try:
+            booger = [] # debug list
+            response_echo = [] # return
             req = Request(environ)
             resp = Response(req)
-            #check if path is in ROUTES get controller mapped to route
-            response_echo = ''
-            booger = ['\n****Request object****\n']
+            booger.append('\n****Request object****\n')
             booger.append(req.debug)
+
+            #check if path is in ROUTES get controller mapped to route
             for route in config.ROUTES:
                 url = route[0]
                 module, klass = route[1].split('.', 1)
@@ -270,29 +308,29 @@ class App(object):
                 resp.header.state('404 Not Found')
                 resp.add([_404()])
 
-            response_echo += resp(booger)
+            response_echo.append(resp(booger))
         except:
             # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
-            booger = []
-            from sys import exc_info
             from traceback import format_tb
-            e_type, e_value, tb = exc_info() 
+            e_type, e_value, tb = sys.exc_info() 
             traceback = ['Traceback (most recent call last):']
             traceback += format_tb(tb)
             traceback.append('%s: %s' % (e_type.__name__, e_value))
             traceback.append('boogers')
             traceback.extend(booger)
             resp.header.state('500 INTERNAL SERVER ERROR')
-            if config.DEBUG:
-                resp.add(booger)
-            response_echo = '<br/>'.join(traceback) + ''.join(booger)
+            resp.add(booger)
+            response_echo.append('<br/>'.join(traceback))
+            response_echo.append(''.join(booger))
         finally:
             log('pykaboo rendered in approximately: %f' %(time()-start_time,))
             start_response(*resp.header.pack[:2])
-            return list(response_echo)
+            return response_echo
                 
     def _controller_exists(self, file):
-        '''check if controller file exists in config.CONTROLLER_PATH'''
+        """
+        check if controller file exists in config.CONTROLLER_PATH
+    """
         if config.CONTROLLER_PATH:
             controller_file = config.CONTROLLER_PATH + file
         else:
@@ -300,9 +338,11 @@ class App(object):
         return os.path.isfile(controller_file)
 
     def _get_controller(self, module, klass, req):
-        '''create a controller object 
-@see http://technogeek.org/python-module.html 
-@see http://docs.python.org/library/functions.html#__import__'''
+        """
+        create a controller object 
+        @see http://technogeek.org/python-module.html 
+        @see http://docs.python.org/library/functions.html#__import__
+    """
         sys.path.append(config.CONTROLLER_PATH)
         __import__(module)
         controller_module = sys.modules[module]
@@ -312,14 +352,13 @@ class App(object):
         return controller
 
 
-app = App()
-application = app
+application = App()
 
 if __name__ == '__main__':
     from wsgiref.validate import validator
     from wsgiref.simple_server import make_server
-    httpd = make_server('', 8888, validator(app))
+    httpd = make_server('', 8888, validator(application))
     
-    print "Serving on port 8888..."
+    print "Serving on port 8888... (quit) <Ctrl> + C"
     httpd.serve_forever()
 
