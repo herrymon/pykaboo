@@ -134,13 +134,13 @@ class Response(object):
             self.header.add('Set-Cookie', '{0}={1}'.format(key, cookie[key].value))
 
 
+
 class Request(object):
     '''container of WSGI environ object'''
     def __init__(self, _env):
         self.environ = _env
         self.content_length = self.environ.get('CONTENT_LENGTH', '0')
         self.path_info = self.environ.get('PATH_INFO', '')
-        self.path = self.path_info.split('/')
         self._post_cache()
         from Cookie import SimpleCookie
         self.cookie = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
@@ -157,6 +157,17 @@ class Request(object):
                 self.post_cache = body.read()
 
     @property
+    def base_url(self):
+        url = []
+        script = self.environ.get('SCRIPT_NAME','')
+        url.append(self.environ.get('wsgi.url_scheme'))
+        url.append('://')
+        url.append(self.environ.get('HTTP_HOST'))
+        url.append(script)
+        url.append('/')
+        return ''.join(url)
+
+    @property
     def method(self):
         _supported_methods = ('GET', 'POST')
         _method = self.environ.get('REQUEST_METHOD', None)
@@ -164,6 +175,12 @@ class Request(object):
             return _method.lower() # why lower? need to map this later to Controller method Eg def get(self)...
         else:
             raise HTTPRequestException('method is not supported. Only GET and POST is supported at the moment...')
+
+    @property
+    def path(self):
+        # remove empty strings
+        path = [p for p in self.path_info.split('/') if p]
+        return path
 
     @property
     def post(self):
@@ -177,13 +194,16 @@ class Request(object):
     def debug(self):
         """string representation of Request attributes"""
         return """
+            base_url: {base}
             method: {meth}
             post: {post}
             query_string: {qs} 
             cookie: {cook} 
             path_info: {pi}
             path: {pth}""".format(
-                            meth=self.method, post=str(self.post), qs=str(self.query_string), cook=str(self.cookie), pi=self.path_info, pth=str(self.path)
+                            base=self.base_url, meth=self.method, 
+                            post=str(self.post), qs=str(self.query_string), 
+                            cook=str(self.cookie), pi=self.path_info, pth=str(self.path)
         ) 
 
     def cookie_set(self, key, val, default, add_to=None):
@@ -246,6 +266,11 @@ class Controller(object):
     @property
     def QUERY_STRING(self):
         return self.request.query_string
+
+    def redirect(self, url_append, code=None):
+        _code = '303 SEE OTHER' if not code else code
+        self.request.header.state(_code)
+        self.request.header.add('Location', self.request.base_url + url_append)
 
 
 class Header(object):
@@ -323,7 +348,7 @@ class App(object):
             response_echo.append('<br/>'.join(traceback))
             response_echo.append(''.join(booger))
         finally:
-            log('pykaboo rendered in approximately: %f' %(time()-start_time,))
+            log('\npykaboo rendered in approximately: %f' %(time()-start_time,))
             start_response(*resp.header.pack[:2])
             return response_echo
                 
