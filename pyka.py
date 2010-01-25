@@ -96,7 +96,7 @@ class Database(object):
             cursor.execute(_query)
             return cursor.fetchall()
 
-#main components
+# main components
 class Response(object):
     """
     wsgi Response, wraps a Request object,
@@ -169,7 +169,7 @@ class Request(object):
         _supported_methods = ('GET', 'POST')
         _method = self.environ.get('REQUEST_METHOD', None)
         if _method and _method in _supported_methods:
-            return _method.lower() # why lower? need to map this later to Controller method Eg def get(self)...
+            return _method.lower() # why lower? need to map this later to App method Eg def get(self)...
         else:
             raise HTTPRequestException('method is not supported. Only GET and POST is supported at the moment...')
 
@@ -249,13 +249,14 @@ class Template(object):
         return page
 
 
-class Controller(object):
+class App(object):
     """
-    All controllers inherit Controller. Do not forget to set CONTROLLERS_PATH in config.py
-"""
+        All apps inherit App. Do not forget to set APP_PATH in config.py
+    """
     def __init__(self, _request, _response):
         self.request = _request
         self.response = _response
+
 
     @property
     def POST(self):
@@ -270,11 +271,15 @@ class Controller(object):
         self.response.header.state(_code)
         self.response.header.add('Location', self.request.base_url + url_append)
 
+    # override on app
+    def get(self): pass
+    def post(self): pass
+
 
 class Header(object):
     """
-    status object and response headers packed to use as arg to start_response()
-"""
+        status object and response headers packed to use as arg to start_response()
+    """
     def __init__(self, _status, _header):
         '''@usage start_response(*header.pack)'''
         self.pack = []
@@ -283,19 +288,19 @@ class Header(object):
         log('Header: Created header[status=%s, header=[%s]]' %(self.pack[0], str(self.pack[1])) )
 
     def state(self, _status):
-        '''@usage header.state('404 NOT FOUND')'''
+        """usage header.state('404 NOT FOUND')"""
         self.pack[0] = _status
 
     def add(self, *args):
-        '''@usage header.add('Content-Type', 'text/html')'''
+        """usage header.add('Content-Type', 'text/html')"""
         if args:
             self.pack[1].append(args)
 
 
-class App(object):
+class Wsgi(object):
     """
-    wsgi application wrapper, class is called as a func(tion)
-"""
+        wsgi application wrapper, class is called as a function(__call__)
+    """
     def __call__(self, environ, start_response):
         from time import time
         start_time = time()
@@ -308,19 +313,19 @@ class App(object):
             booger.append('\n****Request object****\n')
             booger.append(req.debug)
 
-            #check if path is in ROUTES get controller mapped to route
+            #check if path is in ROUTES get app mapped to route
             for route in config.ROUTES:
                 url = route[0]
-                module, klass = route[1].split('.', 1)
+                module, cls = route[1].split('.', 1)
                 if url == req.path_info:
-                    if self._controller_exists(module + EXT):
-                        controller = self._get_controller(module, klass, req, resp)
-                        func = getattr(controller, req.method)
-                        resp.add([func()])
+                    if self._app_exists(module + EXT):
+                        app = self._get_app(module, cls, req, resp)
+                        app_method = getattr(app, req.method)
+                        resp.add([app_method()])
                         booger.append('\nurl:{0}'.format(url))
                         booger.append('\ncookie_keys:{0}'.format(','.join(req.cookie.keys())) )
-                        booger.append('\n\n****Controller object****')
-                        booger.append('\nfile.controller.method:{f}.{c}.{m}'.format(f=module, c=klass, m=func.__name__) )                        
+                        booger.append('\n\n****App object****')
+                        booger.append('\nfile.app.method:{f}.{c}.{m}'.format(f=module, c=cls, m=app_method.__name__) )                        
                         resp.cookie_header(req.cookie, req.cookie.keys())
 
                         # break from route loop
@@ -345,37 +350,37 @@ class App(object):
             response_echo.append('<br/>'.join(traceback))
             response_echo.append(''.join(booger))
         finally:
-            log('\npykaboo rendered in approximately: %f' %(time()-start_time,))
+            booger.append('\npykaboo rendered in approximately: %f' %(time()-start_time,))
             start_response(*resp.header.pack[:2])
             response_echo.append(resp(booger))
             return response_echo
                 
-    def _controller_exists(self, _file):
+    def _app_exists(self, _file):
         """
-        check if controller file exists in config.CONTROLLER_PATH
-    """
-        if config.CONTROLLER_PATH:
-            controller_file = config.CONTROLLER_PATH + _file
+            check if app file exists in config.APP_PATH
+        """
+        if config.APP_PATH:
+            app_file = config.APP_PATH + _file
         else:
-            controller_file = '{dir}/{file}'.format(dir=os.path.dirname(__file__), file=_file)
-        return os.path.isfile(controller_file)
+            app_file = '{dir}/{file}'.format(dir=os.path.dirname(__file__), file=_file)
+        return os.path.isfile(app_file)
 
-    def _get_controller(self, _module, _klass, _request, _response):
+    def _get_app(self, _module, _cls, _request, _response):
         """
-        create a controller object 
-        @see http://technogeek.org/python-module.html 
-        @see http://docs.python.org/library/functions.html#__import__
-    """
-        sys.path.append(config.CONTROLLER_PATH)
+            create an app object 
+            @see http://technogeek.org/python-module.html 
+            @see http://docs.python.org/library/functions.html#__import__
+        """
+        sys.path.append(config.APP_PATH)
         __import__(_module)
-        controller_module = sys.modules[_module]
-        controller_klass = getattr(controller_module, _klass)
-        controller = controller_klass(_request, _response)
+        app_module = sys.modules[_module]
+        app_cls = getattr(app_module, _cls)
+        app = app_cls(_request, _response)
 
-        return controller
+        return app
 
 
-application = App()
+application = Wsgi()
 
 if __name__ == '__main__':
     from wsgiref.validate import validator
