@@ -158,14 +158,11 @@ class Request(object):
 
     @property
     def base_url(self):
-        url = []
-        script = self.environ.get('SCRIPT_NAME','')
-        url.append(self.environ.get('wsgi.url_scheme'))
-        url.append('://')
-        url.append(self.environ.get('HTTP_HOST'))
-        url.append(script)
-        url.append('/')
-        return ''.join(url)
+        return "{scheme}://{host}{script}/".format(
+                    scheme=self.environ.get('wsgi.url_scheme'),
+                    host=self.environ.get('HTTP_HOST'),
+                    script=self.environ.get('SCRIPT_NAME','')
+                )
 
     @property
     def method(self):
@@ -256,8 +253,9 @@ class Controller(object):
     """
     All controllers inherit Controller. Do not forget to set CONTROLLERS_PATH in config.py
 """
-    def __init__(self, _request):
+    def __init__(self, _request, _response):
         self.request = _request
+        self.response = _response
 
     @property
     def POST(self):
@@ -269,8 +267,8 @@ class Controller(object):
 
     def redirect(self, url_append, code=None):
         _code = '303 SEE OTHER' if not code else code
-        self.request.header.state(_code)
-        self.request.header.add('Location', self.request.base_url + url_append)
+        self.response.header.state(_code)
+        self.response.header.add('Location', self.request.base_url + url_append)
 
 
 class Header(object):
@@ -316,7 +314,7 @@ class App(object):
                 module, klass = route[1].split('.', 1)
                 if url == req.path_info:
                     if self._controller_exists(module + EXT):
-                        controller = self._get_controller(module, klass, req)
+                        controller = self._get_controller(module, klass, req, resp)
                         func = getattr(controller, req.method)
                         resp.add([func()])
                         booger.append('\nurl:{0}'.format(url))
@@ -333,7 +331,6 @@ class App(object):
                 resp.header.state('404 Not Found')
                 resp.add([_404()])
 
-            response_echo.append(resp(booger))
         except:
             # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
             from traceback import format_tb
@@ -350,29 +347,30 @@ class App(object):
         finally:
             log('\npykaboo rendered in approximately: %f' %(time()-start_time,))
             start_response(*resp.header.pack[:2])
+            response_echo.append(resp(booger))
             return response_echo
                 
-    def _controller_exists(self, file):
+    def _controller_exists(self, _file):
         """
         check if controller file exists in config.CONTROLLER_PATH
     """
         if config.CONTROLLER_PATH:
-            controller_file = config.CONTROLLER_PATH + file
+            controller_file = config.CONTROLLER_PATH + _file
         else:
-            controller_file = os.path.dirname(__file__) + '/' + file
+            controller_file = '{dir}/{file}'.format(dir=os.path.dirname(__file__), file=_file)
         return os.path.isfile(controller_file)
 
-    def _get_controller(self, module, klass, req):
+    def _get_controller(self, _module, _klass, _request, _response):
         """
         create a controller object 
         @see http://technogeek.org/python-module.html 
         @see http://docs.python.org/library/functions.html#__import__
     """
         sys.path.append(config.CONTROLLER_PATH)
-        __import__(module)
-        controller_module = sys.modules[module]
-        controller_klass = getattr(controller_module, klass)
-        controller = controller_klass(req)
+        __import__(_module)
+        controller_module = sys.modules[_module]
+        controller_klass = getattr(controller_module, _klass)
+        controller = controller_klass(_request, _response)
 
         return controller
 
