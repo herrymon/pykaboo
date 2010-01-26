@@ -58,10 +58,10 @@ else:
 #utility functions
 def dictify(input_text):
     """
-    convert wsgi.input to {}, uses built-in urlparse module
-    Eg name=Erick&pets=rat&pets=cats to {'name': ['Erick'], 'pets': ['rats', 'cats']}
-    Note: all values are lists
-"""
+        convert wsgi.input to {}, uses built-in urlparse module
+        Eg name=Erick&pets=rat&pets=cats to {'name': ['Erick'], 'pets': ['rats', 'cats']}
+        Note: all values are lists
+    """
     log('xutils.dictify: %d %s' %(len(input_text), input_text))
     from urlparse import parse_qs
     from cgi import escape
@@ -79,9 +79,9 @@ def _404():
 # Database class
 class Database(object):
     """
-    a simple interface to rdbms, 
-    supports only sqlite for now
-"""
+        a simple interface to rdbms, 
+        supports only sqlite for now
+    """
     def _connect(self):
         '''returns a connection cursor'''
         if config.DATABASE_DRIVER == 'sqlite':
@@ -99,9 +99,9 @@ class Database(object):
 # main components
 class Response(object):
     """
-    wsgi Response, wraps a Request object,
-    use this for start_response
-"""
+        wsgi Response, wraps a Request object,
+        use this for start_response
+    """
     def __init__(self, _request):
         self.response = []
         self.request = _request
@@ -136,7 +136,9 @@ class Response(object):
 
 
 class Request(object):
-    '''container of WSGI environ object'''
+    """
+        container of WSGI environ object
+    """
     def __init__(self, _env):
         self.environ = _env
         self.content_length = self.environ.get('CONTENT_LENGTH', '0')
@@ -144,6 +146,8 @@ class Request(object):
         self._post_cache()
         from Cookie import SimpleCookie
         self.cookie = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
+        for key in self.environ:
+            log('{k} -> {v}'.format(k=key, v=str(self.environ[key])))
 
     # on __init__ , wsgi.input must be read/cached, 
     # otherwise I'm getting empty wsgi.input
@@ -166,18 +170,17 @@ class Request(object):
 
     @property
     def method(self):
-        _supported_methods = ('GET', 'POST')
-        _method = self.environ.get('REQUEST_METHOD', None)
-        if _method and _method in _supported_methods:
-            return _method.lower() # why lower? need to map this later to App method Eg def get(self)...
+        supported_methods = ('GET', 'POST')
+        method = self.environ.get('REQUEST_METHOD', 'GET')
+        if method in supported_methods:
+            return method.lower() # why lower? need to map this later to App method Eg def get(self)...
         else:
             raise HTTPRequestException('method is not supported. Only GET and POST is supported at the moment...')
 
     @property
     def path(self):
         # remove empty strings
-        path = [p for p in self.path_info.split('/') if p]
-        return path
+        return [p for p in self.path_info.split('/') if p]
 
     @property
     def post(self):
@@ -186,6 +189,10 @@ class Request(object):
     @property
     def query_string(self):
         return dictify(self.environ.get('QUERY_STRING',''))
+
+    @property
+    def referrer(self):
+        return self.environ.get('HTTP_REFERRER','')
         
     @property
     def debug(self):
@@ -200,7 +207,8 @@ class Request(object):
             path: {pth}""".format(
                             base=self.base_url, meth=self.method, 
                             post=str(self.post), qs=str(self.query_string), 
-                            cook=str(self.cookie), pi=self.path_info, pth=str(self.path)
+                            cook=str(self.cookie), pi=self.path_info, 
+                            pth=str(self.path)
         ) 
 
     def cookie_set(self, key, val, default, add_to=None):
@@ -221,9 +229,9 @@ class Request(object):
 
 class Template(object):
     """
-    instantiate with filename of html template file. Do not forget to set TEMPLATE_PATH in config.py. 
-    wrapper for string.Template @see http://docs.python.org/library/string.html#template-strings
-"""
+        instantiate with filename of html template file. Do not forget to set TEMPLATE_PATH in config.py. 
+        wrapper for string.Template @see http://docs.python.org/library/string.html#template-strings
+    """
     def __init__(self, tfile, echo=True):
         try:
             self.echo = echo
