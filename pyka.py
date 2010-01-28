@@ -42,6 +42,37 @@ EXT = '.py'
 class HTTPRequestException(Exception): pass
 class TemplateNotFoundException(Exception): pass
 
+# via pylonsbook @see http://pylonsbook.com/en/1.1/the-web-server-gateway-interface-wsgi.html#handling-errors 
+class ErrorMiddleware(object):
+    """
+        wsgi middleware to handle exceptions in wsgi app
+    """
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        try:
+            return self.app(environ, start_response)
+        except:
+            # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
+            from traceback import format_tb
+            exc_info = sys.exc_info()
+            traceback = ['Traceback (most recent call last):']
+            traceback += format_tb(exc_info[2])
+            traceback.append('%s: %s' % (exc_info[0].__name__, exc_info[1]))
+            start_response('500 INTERNAL SERVER ERROR', [('Content-Type', 'text/html')], exc_info)
+            return '<br/>'.join(traceback)
+
+class DebugMiddleware(object):
+    """
+        wsgi middleware to display at bottom of webpage, environ info
+    """
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        pass
+
 if config.LOG:
     def log(msg):
         from datetime import datetime
@@ -103,31 +134,27 @@ class Response(object):
         use this for start_response
     """
     def __init__(self, _request):
-        self.response = []
         self.request = _request
         # add default headers
         self.header = Header('200 OK', ('Content-Type', 'text/html'))
 
-    def __call__(self, booger=None):
+    def show(self, resp, booger=None):
+        response = [resp]
         if self.request.method == 'HEAD':
             return ''
         else:
             # red box that appears at bottom of page if config.DEBUG is True
-            is_debug = booger and config.DEBUG
+            is_debug = booger and config.DEBUG and response
             if is_debug:
                 booger.append('\nself.request.POST.keys()'+','.join(self.request.post.keys()))
                 from cgi import escape
-                self.add('<pre style="background:#fdd;border:1px solid #ecc;margin:0;padding:1em">')
-                self.add('<h3 style="margin:0;padding:0.2em;line-height:1.5em;background:#800;color:#fff">config.DEBUG is on, turn off debugging to hide this box</h3>')
+                response.append('<pre style="background:#fdd;border:1px solid #ecc;margin:0;padding:1em">')
+                response.append('<h3 style="margin:0;padding:0.2em;line-height:1.5em;background:#800;color:#fff">config.DEBUG is on, turn off debugging to hide this box</h3>')
                 for b in booger:
-                    self.add([escape(b)])
-                self.add('</pre>')
-            _response = ''.join(self.response)
-            return _response
-
-    def add(self, resp=None):
-        """add list to response output"""
-        self.response.extend(resp)
+                    response.append(escape(b))
+                response.append('</pre>')
+            str_response = ''.join(response)
+            return str_response
 
     def cookie_header(self, cookie, keys):
         for key in keys:
@@ -139,8 +166,8 @@ class Request(object):
     """
         container of WSGI environ object
     """
-    def __init__(self, _env):
-        self.environ = _env
+    def __init__(self, environ):
+        self.environ = environ
         self.content_length = self.environ.get('CONTENT_LENGTH', '0')
         self.path_info = self.environ.get('PATH_INFO', '')
         self._post_cache()
@@ -310,58 +337,38 @@ class Wsgi(object):
         wsgi application wrapper, class is called as a function(__call__)
     """
     def __call__(self, environ, start_response):
-        from time import time
-        start_time = time()
+        booger = [] # debug list
+        response_echo = [] # return
+        req = Request(environ)
+        resp = Response(req)
+        booger.append('\n****Request object****\n')
+        booger.append(req.debug)
 
-        try:
-            booger = [] # debug list
-            response_echo = [] # return
-            req = Request(environ)
-            resp = Response(req)
-            booger.append('\n****Request object****\n')
-            booger.append(req.debug)
+        #check if path is in ROUTES get app mapped to route
+        for route in config.ROUTES:
+            url = route[0]
+            module, cls = route[1].split('.', 1)
+            if url == req.path_info:
+                if self._app_exists(module + EXT):
+                    app = self._get_app(module, cls, req, resp)
+                    app_method = getattr(app, req.method)
+                    booger.append('\nurl:{0}'.format(url))
+                    booger.append('\ncookie_keys:{0}'.format(','.join(req.cookie.keys())) )
+                    booger.append('\n\n****App object****')
+                    booger.append('\nfile.app.method:{f}.{c}.{m}'.format(f=module, c=cls, m=app_method.__name__) )                        
+                    resp.cookie_header(req.cookie, req.cookie.keys())
+                    response_echo.append(resp.show(app_method(), booger))
 
-            #check if path is in ROUTES get app mapped to route
-            for route in config.ROUTES:
-                url = route[0]
-                module, cls = route[1].split('.', 1)
-                if url == req.path_info:
-                    if self._app_exists(module + EXT):
-                        app = self._get_app(module, cls, req, resp)
-                        app_method = getattr(app, req.method)
-                        resp.add([app_method()])
-                        booger.append('\nurl:{0}'.format(url))
-                        booger.append('\ncookie_keys:{0}'.format(','.join(req.cookie.keys())) )
-                        booger.append('\n\n****App object****')
-                        booger.append('\nfile.app.method:{f}.{c}.{m}'.format(f=module, c=cls, m=app_method.__name__) )                        
-                        resp.cookie_header(req.cookie, req.cookie.keys())
+                    # break from route loop
+                    break
 
-                        # break from route loop
-                        break
+        # not in ROUTES, no break encountered
+        else:
+            resp.header.state('404 Not Found')
+            response_echo.append(_404())
 
-            # not in ROUTES, no break encountered
-            else:
-                resp.header.state('404 Not Found')
-                resp.add([_404()])
-
-        except:
-            # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
-            from traceback import format_tb
-            e_type, e_value, tb = sys.exc_info() 
-            traceback = ['Traceback (most recent call last):']
-            traceback += format_tb(tb)
-            traceback.append('%s: %s' % (e_type.__name__, e_value))
-            traceback.append('boogers')
-            traceback.extend(booger)
-            resp.header.state('500 INTERNAL SERVER ERROR')
-            resp.add(booger)
-            response_echo.append('<br/>'.join(traceback))
-            response_echo.append(''.join(booger))
-        finally:
-            booger.append('\npykaboo rendered in approximately: %f' %(time()-start_time,))
-            start_response(*resp.header.pack[:2])
-            response_echo.append(resp(booger))
-            return response_echo
+        start_response(*resp.header.pack[:2])
+        return response_echo
                 
     def _app_exists(self, _file):
         """
@@ -391,9 +398,8 @@ class Wsgi(object):
 application = Wsgi()
 
 if __name__ == '__main__':
-    from wsgiref.validate import validator
     from wsgiref.simple_server import make_server
-    httpd = make_server('', 8888, validator(application))
+    httpd = make_server('', 8888, ErrorMiddleware(application))
     
     print "Serving on port 8888... (quit) <Ctrl> + C"
     httpd.serve_forever()
