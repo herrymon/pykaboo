@@ -1,4 +1,4 @@
-'''
+"""
 desc:
 an attempt at a tiny wsgi framework, 
 status: barely usable
@@ -25,7 +25,7 @@ Cookie module - http://docs.python.org/library/cookie.html
 notes:
 dev runs on python 2.6.4, 
 apache with mod_wsgi/wsgiref.simple_server
-''' 
+""" 
 
 __version__ = '0.1'
 __author__ = 'herrymonster@gmail.com'
@@ -48,6 +48,17 @@ class ErrorMiddleware(object):
     """
         wsgi middleware to handle exceptions in wsgi app
     """
+    TEMPLATE = """
+            <html>
+            <head>
+            <style>pre{{background:#def;border:1px solid #cde;margin:1em;padding:0.75em}}</style>
+            </head>
+            <title>{title}</title>
+            <body>
+            {body}
+            </body>
+            </html>
+        """
     def __init__(self, app):
         self.app = app
 
@@ -62,17 +73,18 @@ class ErrorMiddleware(object):
             else:
                 header, message = self.error_500(exc_info)
             start_response(header, [('Content-Type', 'text/html')], exc_info)
-            return message
+            return ErrorMiddleware.TEMPLATE.format(body=message, title=header)
 
     def error_404(self, exc_info):
-            return "404 NOT FOUND", "<h1>404 Not Found</h1>"
+            return "404 NOT FOUND", "<h1>404 Not Found</h1><pre>{msg}</pre>".format(msg=exc_info[1])
 
     def error_500(self, exc_info):
             from traceback import format_tb
             traceback = ['Traceback (most recent call last):']
             traceback += format_tb(exc_info[2])
             traceback.append('%s: %s' % (exc_info[0].__name__, exc_info[1]))
-            return "500 INTERNAL SERVER ERROR", "<h1>500 Internal Server Error</h1>%s" %'<br/>'.join(traceback)
+            return "500 INTERNAL SERVER ERROR", "<h1>500 Internal Server Error</h1><pre>{tb}</pre>".format(tb='<br/>'.join(traceback))
+
 
 class DebugMiddleware(object):
     """
@@ -112,11 +124,6 @@ def dictify(input_text):
     for key in dict_input:
         dict_input[key] = [escape(val) for val in dict_input[key]]
     return dict_input
-
-def _404():
-    '''no route found'''
-    # @TODO put a Template here
-    return 'Page not found'
 
 # Database class
 class Database(object):
@@ -390,7 +397,7 @@ class Wsgi(object):
             if url == request.path_info:
                 return (module, cls)
         else:
-            raise RouteNotFoundException('No route found, check that url matches with config.ROUTE')
+            raise RouteNotFoundException('No route found, check that %s matches with config.ROUTE' %request.path_info)
 
     def _app_exists(self, _file):
         """
