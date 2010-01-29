@@ -41,6 +41,7 @@ EXT = '.py'
 '''errors and logger'''
 class HTTPRequestException(Exception): pass
 class TemplateNotFoundException(Exception): pass
+class RouteNotFoundException(Exception): pass
 
 # via pylonsbook @see http://pylonsbook.com/en/1.1/the-web-server-gateway-interface-wsgi.html#handling-errors 
 class ErrorMiddleware(object):
@@ -55,13 +56,23 @@ class ErrorMiddleware(object):
             return self.app(environ, start_response)
         except:
             # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
-            from traceback import format_tb
             exc_info = sys.exc_info()
+            if exc_info[0].__name__ == RouteNotFoundException.__name__:
+                header, message = self.error_404(exc_info)
+            else:
+                header, message = self.error_500(exc_info)
+            start_response(header, [('Content-Type', 'text/html')], exc_info)
+            return message
+
+    def error_404(self, exc_info):
+            return "404 NOT FOUND", "<h1>404 Not Found</h1>"
+
+    def error_500(self, exc_info):
+            from traceback import format_tb
             traceback = ['Traceback (most recent call last):']
             traceback += format_tb(exc_info[2])
             traceback.append('%s: %s' % (exc_info[0].__name__, exc_info[1]))
-            start_response('500 INTERNAL SERVER ERROR', [('Content-Type', 'text/html')], exc_info)
-            return '<br/>'.join(traceback)
+            return "500 INTERNAL SERVER ERROR", "<h1>500 Internal Server Error</h1>%s" %'<br/>'.join(traceback)
 
 class DebugMiddleware(object):
     """
@@ -133,33 +144,39 @@ class Response(object):
         wsgi Response, wraps a Request object,
         use this for start_response
     """
-    def __init__(self, _request):
-        self.request = _request
+    def __init__(self, request):
+        self.request = request
+        self.output = []
         # add default headers
         self.header = Header('200 OK', ('Content-Type', 'text/html'))
 
-    def show(self, resp, booger=None):
-        response = [resp]
+    def show(self, response, booger=None):
+        self.output.append(response)
         if self.request.method == 'HEAD':
             return ''
-        else:
-            # red box that appears at bottom of page if config.DEBUG is True
-            is_debug = booger and config.DEBUG and response
-            if is_debug:
-                booger.append('\nself.request.POST.keys()'+','.join(self.request.post.keys()))
-                from cgi import escape
-                response.append('<pre style="background:#fdd;border:1px solid #ecc;margin:0;padding:1em">')
-                response.append('<h3 style="margin:0;padding:0.2em;line-height:1.5em;background:#800;color:#fff">config.DEBUG is on, turn off debugging to hide this box</h3>')
-                for b in booger:
-                    response.append(escape(b))
-                response.append('</pre>')
-            str_response = ''.join(response)
-            return str_response
+        #
+        #else:
+            # red box that appears at bottom of page if config.DEBUG
+        #    is_debug = booger and config.DEBUG and resp
+        #    if is_debug:
+        #        booger.append('\nself.request.POST.keys()'+','.join(self.request.post.keys()))
+        #        from cgi import escape
+        #        self.output.append('<pre style="background:#fdd;border:1px solid #ecc;margin:0;padding:1em">')
+        #        self.output.append(
+        #            """
+        #                <h3 style="margin:0;padding:0.2em;line-height:1.5em;background:#800;color:#fff">
+        #                config.DEBUG is on, turn off debugging to hide this box
+        #                </h3>
+        #            """)
+        #        for b in booger:
+        #            self.output.append(escape(b))
+        #        self.output.append('</pre>')
+        str_response = ''.join(self.output)
+        return str_response
 
     def cookie_header(self, cookie, keys):
         for key in keys:
             self.header.add('Set-Cookie', '{0}={1}'.format(key, cookie[key].value))
-
 
 
 class Request(object):
@@ -302,8 +319,8 @@ class App(object):
         return self.request.query_string
 
     def redirect(self, url_append, code=None):
-        _code = '303 SEE OTHER' if not code else code
-        self.response.header.state(_code)
+        code = '303 SEE OTHER' if not code else code
+        self.response.header.state(code)
         self.response.header.add('Location', self.request.base_url + url_append)
 
     # override on app
@@ -345,24 +362,20 @@ class Wsgi(object):
         booger.append(req.debug)
 
         #check if path is in ROUTES get app mapped to route
-        for route in config.ROUTES:
-            url = route[0]
-            module, cls = route[1].split('.', 1)
-            if url == req.path_info:
-                if self._app_exists(module + EXT):
-                    app = self._get_app(module, cls, req, resp)
-                    app_method = getattr(app, req.method)
-                    booger.append('\nurl:{0}'.format(url))
-                    booger.append('\ncookie_keys:{0}'.format(','.join(req.cookie.keys())) )
-                    booger.append('\n\n****App object****')
-                    booger.append('\nfile.app.method:{f}.{c}.{m}'.format(f=module, c=cls, m=app_method.__name__) )                        
-                    resp.cookie_header(req.cookie, req.cookie.keys())
-                    response_echo.append(resp.show(app_method(), booger))
+        route = self.get_route(req)
+        if route:
+            module, cls = route
+            if self._app_exists(module + EXT):
+                app = self._get_app(module, cls, req, resp)
+                app_method = getattr(app, req.method)
+                booger.append('\ncookie_keys:{0}'.format(','.join(req.cookie.keys())) )
+                booger.append('\n\n****App object****')
+                booger.append('\nfile.app.method:{f}.{c}.{m}'.format(f=module, c=cls, m=app_method.__name__) )                        
+                resp.cookie_header(req.cookie, req.cookie.keys())
+                echo = resp.show(app_method(), booger)
+                response_echo.append(echo)
 
-                    # break from route loop
-                    break
-
-        # not in ROUTES, no break encountered
+        # no route found
         else:
             resp.header.state('404 Not Found')
             response_echo.append(_404())
@@ -370,6 +383,15 @@ class Wsgi(object):
         start_response(*resp.header.pack[:2])
         return response_echo
                 
+    def get_route(self, request):
+        for route in config.ROUTES:
+            url = route[0]
+            module, cls = route[1].split('.', 1)
+            if url == request.path_info:
+                return (module, cls)
+        else:
+            raise RouteNotFoundException('No route found, check that url matches with config.ROUTE')
+
     def _app_exists(self, _file):
         """
             check if app file exists in config.APP_PATH
@@ -399,8 +421,11 @@ application = Wsgi()
 
 if __name__ == '__main__':
     from wsgiref.simple_server import make_server
-    httpd = make_server('', 8888, ErrorMiddleware(application))
+    try:
+        httpd = make_server('', 8888, ErrorMiddleware(application))
     
-    print "Serving on port 8888... (quit) <Ctrl> + C"
-    httpd.serve_forever()
+        print "Serving on port 8888\nCtrl + C to quit"
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print "\nShutting down server on port 88888"
 
