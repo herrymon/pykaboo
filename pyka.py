@@ -12,6 +12,7 @@ webob - http://bitbucket.org/ianb/webob/
 werkzeug - http://werkzeug.pocoo.org/
 bottle.py - http://github.com/defnull/bottle.
 web.py - http://webpy.org/
+pylons -http://pylonshq.com/ 
 django - http://www.djangoproject.com
 
 bookmarks:
@@ -35,9 +36,6 @@ import os, sys
 sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
 import config
 
-'''constants'''
-EXT = '.py'
-
 '''errors and logger'''
 class HTTPRequestException(Exception): pass
 class TemplateNotFoundException(Exception): pass
@@ -58,7 +56,7 @@ class ErrorMiddleware(object):
             {body}
             </body>
             </html>
-        """
+    """
     def __init__(self, app):
         self.app = app
 
@@ -157,29 +155,12 @@ class Response(object):
         # add default headers
         self.header = Header('200 OK', ('Content-Type', 'text/html'))
 
-    def show(self, response, booger=None):
-        self.output.append(response)
+    def show(self, response):
         if self.request.method == 'HEAD':
-            return ''
-        #
-        #else:
-            # red box that appears at bottom of page if config.DEBUG
-        #    is_debug = booger and config.DEBUG and resp
-        #    if is_debug:
-        #        booger.append('\nself.request.POST.keys()'+','.join(self.request.post.keys()))
-        #        from cgi import escape
-        #        self.output.append('<pre style="background:#fdd;border:1px solid #ecc;margin:0;padding:1em">')
-        #        self.output.append(
-        #            """
-        #                <h3 style="margin:0;padding:0.2em;line-height:1.5em;background:#800;color:#fff">
-        #                config.DEBUG is on, turn off debugging to hide this box
-        #                </h3>
-        #            """)
-        #        for b in booger:
-        #            self.output.append(escape(b))
-        #        self.output.append('</pre>')
-        str_response = ''.join(self.output)
-        return str_response
+            return ""
+        else:
+            self.output.append(response)
+            return "".join(self.output)
 
     def cookie_header(self, cookie, keys):
         for key in keys:
@@ -199,6 +180,7 @@ class Request(object):
         self.cookie = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
         for key in self.environ:
             log('{k} -> {v}'.format(k=key, v=str(self.environ[key])))
+        log(self.debug)
 
     # on __init__ , wsgi.input must be read/cached, 
     # otherwise I'm getting empty wsgi.input
@@ -230,7 +212,7 @@ class Request(object):
 
     @property
     def path(self):
-        # remove empty strings
+        # remove falsy values
         return [p for p in self.path_info.split('/') if p]
 
     @property
@@ -268,7 +250,7 @@ class Request(object):
         is_number = isinstance(val, int)
         if has_cookie:
             if add_to:
-                ''' to support int increment, for now'''
+                # to support int increment, for now
                 if is_number:
                     self.cookie[key] = int(self.cookie[key].value) + val
             else:
@@ -358,36 +340,24 @@ class Header(object):
 
 class Wsgi(object):
     """
-        wsgi application wrapper, class is called as a function(__call__)
+        wsgi application wrapper
     """
     def __call__(self, environ, start_response):
-        booger = [] # debug list
-        response_echo = [] # return
-        req = Request(environ)
-        resp = Response(req)
-        booger.append('\n****Request object****\n')
-        booger.append(req.debug)
+        request = Request(environ)
+        response = Response(request)
 
-        #check if path is in ROUTES get app mapped to route
-        route = self.get_route(req)
+        route = self.get_route(request)
         if route:
             module, cls = route
-            if self._app_exists(module + EXT):
-                app = self._get_app(module, cls, req, resp)
-                app_method = getattr(app, req.method)
-                booger.append('\ncookie_keys:{0}'.format(','.join(req.cookie.keys())) )
-                booger.append('\n\n****App object****')
-                booger.append('\nfile.app.method:{f}.{c}.{m}'.format(f=module, c=cls, m=app_method.__name__) )                        
-                resp.cookie_header(req.cookie, req.cookie.keys())
-                echo = resp.show(app_method(), booger)
-                response_echo.append(echo)
-
-        # no route found
+            if self._app_exists(module):
+                app = self._get_app(module, cls, request, response)
+                app_method = getattr(app, request.method)
+                response_echo = response.show(app_method())
+                response.cookie_header(request.cookie, request.cookie.keys())
         else:
-            resp.header.state('404 Not Found')
-            response_echo.append(_404())
+            response_echo = ""
 
-        start_response(*resp.header.pack[:2])
+        start_response(*response.header.pack[:2])
         return response_echo
                 
     def get_route(self, request):
@@ -404,7 +374,7 @@ class Wsgi(object):
             check if app file exists in config.APP_PATH
         """
         if config.APP_PATH:
-            app_file = config.APP_PATH + _file
+            app_file = config.APP_PATH + _file + '.py'
         else:
             app_file = '{dir}/{file}'.format(dir=os.path.dirname(__file__), file=_file)
         return os.path.isfile(app_file)
@@ -424,13 +394,12 @@ class Wsgi(object):
         return app
 
 
-application = Wsgi()
+application = ErrorMiddleware(Wsgi())
 
 if __name__ == '__main__':
     from wsgiref.simple_server import make_server
     try:
-        httpd = make_server('', 8888, ErrorMiddleware(application))
-    
+        httpd = make_server('', 8888, application)
         print "Serving on port 8888\nCtrl + C to quit"
         httpd.serve_forever()
     except KeyboardInterrupt:
