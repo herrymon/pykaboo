@@ -99,7 +99,7 @@ if config.LOG:
         from datetime import datetime
         import logging
         now = datetime.now()
-        log_file = '{path}log-{year}-{month}-{day}.log'.format(path=config.LOG_PATH, year=now.year, month=now.month, day=now.day)
+        log_file = os.path.join(config.LOG_PATH,'log-{year}-{month}-{day}.log'.format(year=now.year, month=now.month, day=now.day))
         logging.basicConfig(filename=log_file, level=logging.DEBUG)
         logging.debug(msg)
 else:
@@ -268,8 +268,8 @@ class Template(object):
     def __init__(self, tfile, echo=True):
         try:
             self.echo = echo
-            tpl = config.TEMPLATES_PATH + tfile
-            fp = open(tpl, 'r')
+            tpl = os.path.join(config.TEMPLATES_PATH, tfile)
+            fp = open(tpl)
             self.html = fp.read()
             fp.close()
         except IOError:
@@ -369,14 +369,15 @@ class Wsgi(object):
         else:
             raise RouteNotFoundException('No route found, check that %s matches with config.ROUTE' %request.path_info)
 
-    def _app_exists(self, _file):
+    def _app_exists(self, file):
         """
-            check if app file exists in config.APP_PATH
+            check if app file exists in config.APP_PATH, checks pykaboo directory by default
         """
         if config.APP_PATH:
-            app_file = config.APP_PATH + _file + '.py'
+            app_file = os.path.join(config.APP_PATH, '{0}.{1}'.format(file, 'py'))
         else:
-            app_file = '{dir}/{file}'.format(dir=os.path.dirname(__file__), file=_file)
+            dir = os.path.realpath(os.path.dirname(__file__))
+            app_file = os.path.join(dir, file)
         return os.path.isfile(app_file)
 
     def _get_app(self, _module, _cls, _request, _response):
