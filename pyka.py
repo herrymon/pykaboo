@@ -40,6 +40,8 @@ import config
 class HTTPRequestException(Exception): pass
 class TemplateNotFoundException(Exception): pass
 class RouteNotFoundException(Exception): pass
+class AppNotFoundException(Exception): pass
+class AppMethodNotFoundException(Exception): pass
 
 # via pylonsbook @see http://pylonsbook.com/en/1.1/the-web-server-gateway-interface-wsgi.html#handling-errors 
 class ErrorMiddleware(object):
@@ -84,7 +86,7 @@ class ErrorMiddleware(object):
             return "500 INTERNAL SERVER ERROR", "<h1>500 Internal Server Error</h1><pre>{tb}</pre>".format(tb='<br/>'.join(traceback))
 
 
-class DebugMiddleware(object):
+class LoggingMiddleware(object):
     """
         wsgi middleware to display at bottom of webpage, environ info
     """
@@ -99,7 +101,8 @@ if config.LOG:
         from datetime import datetime
         import logging
         now = datetime.now()
-        log_file = os.path.join(config.LOG_PATH,'log-{year}-{month}-{day}.log'.format(year=now.year, month=now.month, day=now.day))
+        log_filename = 'log-{year}-{month}-{day}.log'.format(year=now.year, month=now.month, day=now.day)
+        log_file = os.path.join(config.LOG_PATH, log_filename)
         logging.basicConfig(filename=log_file, level=logging.DEBUG)
         logging.debug(msg)
 else:
@@ -118,7 +121,7 @@ def dictify(input_text):
     from urlparse import parse_qs
     from cgi import escape
     dict_input = parse_qs(input_text)
-    # use cgi.escape built-in to escape "&<>" from GET and POST, or other inputs
+    # use cgi.escape built-in to escape "&<>" input_text 
     for key in dict_input:
         dict_input[key] = [escape(val) for val in dict_input[key]]
     return dict_input
@@ -294,9 +297,9 @@ class App(object):
     """
         All apps inherit App. Do not forget to set APP_PATH in config.py
     """
-    def __init__(self, _request, _response):
-        self.request = _request
-        self.response = _response
+    def __init__(self, request, response):
+        self.request = request
+        self.response = response
 
 
     @property
@@ -311,10 +314,6 @@ class App(object):
         code = '303 SEE OTHER' if not code else code
         self.response.header.state(code)
         self.response.header.add('Location', self.request.base_url + url_append)
-
-    # override on app
-    def get(self): pass
-    def post(self): pass
 
 
 class Header(object):
@@ -346,53 +345,49 @@ class Wsgi(object):
         request = Request(environ)
         response = Response(request)
 
-        route = self.get_route(request)
-        if route:
-            module, cls = route
-            if self._app_exists(module):
-                app = self._get_app(module, cls, request, response)
-                app_method = getattr(app, request.method)
-                response_echo = response.show(app_method())
-                response.cookie_header(request.cookie, request.cookie.keys())
-        else:
-            response_echo = ""
+        module, cls = self.get_route(request.path_info)
+        app = self.get_app(module, cls, request, response)
+        response_echo = self.render_app_method(app, request.method)
+        response.cookie_header(request.cookie, request.cookie.keys())
 
         start_response(*response.header.pack[:2])
         return response_echo
                 
-    def get_route(self, request):
+    def get_route(self, path_info):
         for route in config.ROUTES:
-            url = route[0]
-            module, cls = route[1].split('.', 1)
-            if url == request.path_info:
+            url, module, cls = route.split('__')
+            if url == path_info:
                 return (module, cls)
         else:
-            raise RouteNotFoundException('No route found, check that %s matches with config.ROUTE' %request.path_info)
+            raise RouteNotFoundException('No route found, check that {0} matches with config.ROUTE'.format(path_info))
 
-    def _app_exists(self, file):
-        """
-            check if app file exists in config.APP_PATH, checks pykaboo directory by default
-        """
-        if config.APP_PATH:
-            app_file = os.path.join(config.APP_PATH, '{0}.{1}'.format(file, 'py'))
-        else:
-            dir = os.path.realpath(os.path.dirname(__file__))
-            app_file = os.path.join(dir, file)
-        return os.path.isfile(app_file)
-
-    def _get_app(self, _module, _cls, _request, _response):
+    def get_app(self, module, cls, request, response):
         """
             create an app object 
+            NOTES:
             @see http://technogeek.org/python-module.html 
             @see http://docs.python.org/library/functions.html#__import__
         """
-        sys.path.append(config.APP_PATH)
-        __import__(_module)
-        app_module = sys.modules[_module]
-        app_cls = getattr(app_module, _cls)
-        app = app_cls(_request, _response)
+        app_exists = lambda m: os.path.isfile( os.path.join(config.APP_PATH, '{0}.{1}'.format(m, 'py')) )
 
-        return app
+        if not app_exists(module):
+            raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, config.APP_PATH))
+        else:
+            sys.path.append(config.APP_PATH)
+            __import__(module)
+            app_module = sys.modules[module]
+            try:
+                app_cls = getattr(app_module, cls)
+            except AttributeError:
+                raise AppNotFoundException('App class {0} not found in module {1}'.format(cls, module))
+            return app_cls(request, response)
+
+    def render_app_method(self, app, method):
+        try:
+            app_method = getattr(app, method)
+        except AttributeError:
+            raise AppMethodNotFoundException('App class {0} has no method {1}'.format(cls, method))
+        return app_method()
 
 
 application = ErrorMiddleware(Wsgi())

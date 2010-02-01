@@ -14,8 +14,9 @@ DATABASE_DRIVER = 'sqlite'
 DATABASE = os.path.join(PYKA_PATH, 'data/butiki')
 
 ROUTES = (
-    ('/', 'a.Content'),
-    ('/content', 'a.Content'),
-    ('/test', 'a.Test'),
-    ('/foo', 'a.Foo')
+    "/__a__Content",
+    "/content__a__Content",
+    "/test__a__Test",
+    "/foo__a__Foo",
+    "/mia__mia__Mia"
 )
