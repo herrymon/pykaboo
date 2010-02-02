@@ -26,6 +26,7 @@ Cookie module - http://docs.python.org/library/cookie.html
 notes:
 dev runs on python 2.6.4, 
 apache with mod_wsgi/wsgiref.simple_server
+requires python 2.5
 """ 
 
 __version__ = '0.1'
@@ -42,6 +43,7 @@ class TemplateNotFoundException(Exception): pass
 class RouteNotFoundException(Exception): pass
 class AppNotFoundException(Exception): pass
 class AppMethodNotFoundException(Exception): pass
+class DbNotSupportedException(Exception): pass
 
 # via pylonsbook @see http://pylonsbook.com/en/1.1/the-web-server-gateway-interface-wsgi.html#handling-errors 
 class ErrorMiddleware(object):
@@ -131,20 +133,29 @@ class Database(object):
     """
         a simple interface to rdbms, 
         supports only sqlite for now
+        @requires python 2.5
     """
-    def _connect(self):
+    def connect(self):
         '''returns a connection cursor'''
-        if config.DATABASE_DRIVER == 'sqlite':
-            import sqlite3
-            conn = sqlite3.connect(config.DATABASE)
-            cursor = conn.cursor()
-        return cursor
+        if not config.DATABASE_DRIVER == 'sqlite3':
+            raise DbNotSupportedException('only sqlite3 is supported for now')
+        __import__(config.DATABASE_DRIVER)
+        self.driver = sys.modules[config.DATABASE_DRIVER]
+            
+        conn = self.driver.connect(os.path.join(config.DATABASE_PATH, config.DATABASE_FILE))
+        self.cursor = conn.cursor()
 
-    def query(self, _query):
-        cursor = self._connect()
-        if config.DATABASE_DRIVER == 'sqlite':
-            cursor.execute(_query)
-            return cursor.fetchall()
+    def close(self):
+        self.cursor.close()
+        self.cursor = None
+
+    def query(self, sql):
+        self.connect()
+        self.cursor.execute(sql)
+        fetch = self.cursor.fetchall()
+        self.close()
+        return fetch
+
 
 # main components
 class Response(object):
@@ -152,22 +163,26 @@ class Response(object):
         wsgi Response, wraps a Request object,
         use this for start_response
     """
-    def __init__(self, request):
+    def __init__(self, request, ctype=None):
         self.request = request
         self.output = []
         # add default headers
-        self.header = Header('200 OK', ('Content-Type', 'text/html'))
-
-    def show(self, response):
+        if ctype:
+            self.header = Header('200 OK', ('Content-Type', ctype))
+        else:
+            self.header = Header('200 OK', ('Content-Type', 'text/html'))
+            
+    def show(self, *args):
         if self.request.method == 'HEAD':
             return ""
         else:
-            self.output.append(response)
+            for response in args:
+                self.output.append(response)
             return "".join(self.output)
 
     def cookie_header(self, cookie, keys):
         for key in keys:
-            self.header.add('Set-Cookie', '{0}={1}'.format(key, cookie[key].value))
+            self.header.add('Set-Cookie', str(cookie[key].output(header="")))
 
 
 class Request(object):
@@ -247,7 +262,7 @@ class Request(object):
                             pth=str(self.path)
         ) 
 
-    def cookie_set(self, key, val, default, add_to=None):
+    def cookie_set(self, key, val, default, add_to=None, expires=None):
         '''if COOKIE[key] exists set COOKIE[key] to val, else COOKIE[key] = default'''
         has_cookie = self.cookie.get(key, None)
         is_number = isinstance(val, int)
@@ -255,12 +270,17 @@ class Request(object):
             if add_to:
                 # to support int increment, for now
                 if is_number:
-                    self.cookie[key] = int(self.cookie[key].value) + val
+                    self.cookie[key] = int(self.cookie[key].coded_value) + val
             else:
                 self.cookie[key] = val
         else:
             self.cookie[key] = default
-
+        if expires:
+            from time import time, gmtime, strftime
+            os.environ['TZ'] = 'GMT'
+            expiry_time = gmtime(time() + expires)
+            self.cookie[key]['expires'] = strftime('%a, %d-%b-%Y %H:%M:%S %Z', expiry_time)
+        self.cookie[key]['path'] = "/"
 
 
 class Template(object):
@@ -347,7 +367,7 @@ class Wsgi(object):
 
         module, cls = self.get_route(request.path_info)
         app = self.get_app(module, cls, request, response)
-        response_echo = self.render_app_method(app, request.method)
+        response_echo = response.show(self.render_app_method(app, request.method))
         response.cookie_header(request.cookie, request.cookie.keys())
 
         start_response(*response.header.pack[:2])
@@ -374,10 +394,12 @@ class Wsgi(object):
             raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, config.APP_PATH))
         else:
             sys.path.append(config.APP_PATH)
-            __import__(module)
-            app_module = sys.modules[module]
             try:
+                __import__(module)
+                app_module = sys.modules[module]
                 app_cls = getattr(app_module, cls)
+            except ImportError:
+                raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, config.APP_PATH))
             except AttributeError:
                 raise AppNotFoundException('App class {0} not found in module {1}'.format(cls, module))
             return app_cls(request, response)
