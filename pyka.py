@@ -182,7 +182,7 @@ class Response(object):
 
     def cookie_header(self, cookie, keys):
         for key in keys:
-            self.header.add('Set-Cookie', str(cookie[key].output(header="")))
+            self.header.add('Set-Cookie', cookie[key].output(header="").strip())
 
 
 class Request(object):
