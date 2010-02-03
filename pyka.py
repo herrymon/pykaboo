@@ -87,6 +87,20 @@ class ErrorMiddleware(object):
             traceback.append('%s: %s' % (exc_info[0].__name__, exc_info[1]))
             return "500 INTERNAL SERVER ERROR", "<h1>500 Internal Server Error</h1><pre>{tb}</pre>".format(tb='<br/>'.join(traceback))
 
+# utility functions
+def expires_in(**kwargs):
+    """returns a string date, for cookie 'expires' attribute
+    @see rf2109 10.1.2"""
+    total_secs = (
+        kwargs.get('day', 0) * 24 * 60 * 60,
+        kwargs.get('hour', 0) * 60 * 60,
+        kwargs.get('min', 0) * 60,
+        kwargs.get('sec', 0)
+    )
+    import time
+    expiry_time = time.gmtime(time.time() - time.timezone + sum(total_secs))
+    return time.strftime('%a, %d-%b-%Y %H:%M:%S GMT', expiry_time)
+
 
 class LoggingMiddleware(object):
     """
@@ -180,10 +194,6 @@ class Response(object):
                 self.output.append(response)
             return "".join(self.output)
 
-    def cookie_header(self, cookie, keys):
-        for key in keys:
-            self.header.add('Set-Cookie', cookie[key].output(header="").strip())
-
 
 class Request(object):
     """
@@ -262,9 +272,11 @@ class Request(object):
                             pth=str(self.path)
         ) 
 
-    def cookie_set(self, key, val, default, add_to=None, expires=None):
+    def cookie_set(self, key, val, default, add_to=None, **kwargs):
         '''if COOKIE[key] exists set COOKIE[key] to val, else COOKIE[key] = default'''
         has_cookie = self.cookie.get(key, None)
+        attributes = {'path':'/'}
+        attributes.update(kwargs)
         is_number = isinstance(val, int)
         if has_cookie:
             if add_to:
@@ -275,12 +287,8 @@ class Request(object):
                 self.cookie[key] = val
         else:
             self.cookie[key] = default
-        if expires:
-            from time import time, gmtime, strftime
-            os.environ['TZ'] = 'GMT'
-            expiry_time = gmtime(time() + expires)
-            self.cookie[key]['expires'] = strftime('%a, %d-%b-%Y %H:%M:%S %Z', expiry_time)
-        self.cookie[key]['path'] = "/"
+        for attr in attributes:
+            self.cookie[key][attr] = attributes[attr]
 
 
 class Template(object):
@@ -356,6 +364,10 @@ class Header(object):
         if args:
             self.pack[1].append(args)
 
+    def add_cookie(self, cookie):
+        for key in cookie:
+            self.add('Set-Cookie', cookie[key].OutputString())
+
 
 class Wsgi(object):
     """
@@ -368,7 +380,7 @@ class Wsgi(object):
         module, cls = self.get_route(request.path_info)
         app = self.get_app(module, cls, request, response)
         response_echo = response.show(self.render_app_method(app, request.method))
-        response.cookie_header(request.cookie, request.cookie.keys())
+        response.header.add_cookie(request.cookie)
 
         start_response(*response.header.pack[:2])
         return response_echo

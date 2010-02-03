@@ -45,17 +45,5 @@ class TestResponseAttributes(unittest.TestCase):
         self.response.show('add another output')
         self.assertEqual(2, len(self.response.output))
 
-    def test_add_coookie_header(self):
-        from Cookie import SimpleCookie
-        c = SimpleCookie()
-        c['test'] = 'foobar'
-        c['spam'] = 'egg'
-        self.response.cookie_header(c, ['test', 'spam'])
-        actual = self.response.header
-        expected = Header('200 OK', ('Content-Type','text/html'))
-        expected.add('Set-Cookie','test=foobar')
-        expected.add('Set-Cookie','spam=egg')
-        self.assertEquals(actual.pack, expected.pack)
-
 if __name__ == '__main__':
     unittest.main()

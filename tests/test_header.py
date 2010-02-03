@@ -32,7 +32,19 @@ class TestHeaderAttributes(unittest.TestCase):
         expected = [('Content-Type', 'text/html'), ('Content-Length', '0')]
         self.header.add('Content-Length', '0')
         actual = self.header.pack[1]
-        self.assertEqual(2, len(self.header.pack[1]))
+        self.assertEqual(2, len(actual))
+        self.assertEqual(actual, expected)
+
+    def test_add_cookie_header(self):
+        expected = [('Content-Type', 'text/html'), ('Set-Cookie', 'test=foobar; Path=/'), ('Set-Cookie', 'spam=egg')]
+        from Cookie import SimpleCookie
+        cookie = SimpleCookie()
+        cookie['test'] = 'foobar'
+        cookie['test']['path'] = '/'
+        cookie['spam'] = 'egg'
+        self.header.add_cookie(cookie)
+        actual = self.header.pack[1]
+        self.assertEqual(3, len(actual))
         self.assertEqual(actual, expected)
 
 if __name__ == '__main__':
