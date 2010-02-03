@@ -91,15 +91,15 @@ class ErrorMiddleware(object):
 def expires_in(**kwargs):
     """returns a string date, for cookie 'expires' attribute
     @see rf2109 10.1.2"""
+    from time import time, gmtime, strftime
     total_secs = (
         kwargs.get('day', 0) * 24 * 60 * 60,
         kwargs.get('hour', 0) * 60 * 60,
         kwargs.get('min', 0) * 60,
-        kwargs.get('sec', 0)
+        kwargs.get('sec', 0),
     )
-    import time
-    expiry_time = time.gmtime(time.time() - time.timezone + sum(total_secs))
-    return time.strftime('%a, %d-%b-%Y %H:%M:%S GMT', expiry_time)
+    expiry_time = gmtime(kwargs.get('time', time()) + sum(total_secs))
+    return strftime('%a, %d-%b-%Y %H:%M:%S GMT', expiry_time)
 
 
 class LoggingMiddleware(object):

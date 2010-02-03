@@ -5,7 +5,8 @@ if __name__ == '__main__':
     test_modules = (
                     'test_response', 
                     'test_request', 
-                    'test_header'
+                    'test_header',
+                    'test_utils'
                    )
     for module in test_modules:
         __import__(module)
