@@ -1,6 +1,9 @@
 import unittest
 import sys
 
+import os, sys
+sys.path.append(os.path.dirname('/home/erick/labs/py/pykaboo'))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
+
 if __name__ == '__main__':
     test_modules = (
                     'test_response', 

@@ -33,7 +33,7 @@ __version__ = '0.1'
 __author__ = 'herrymonster@gmail.com'
 __license__ = 'do whatever you want, Ie use at your own risk'
 
-import os, sys
+import os, sys, cgi
 sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
 import config
 
@@ -135,11 +135,10 @@ def dictify(input_text):
     """
     log('xutils.dictify: %d %s' %(len(input_text), input_text))
     from urlparse import parse_qs
-    from cgi import escape
     dict_input = parse_qs(input_text)
     # use cgi.escape built-in to escape "&<>" input_text 
     for key in dict_input:
-        dict_input[key] = [escape(val) for val in dict_input[key]]
+        dict_input[key] = [cgi.escape(val) for val in dict_input[key]]
     return dict_input
 
 # Database class
@@ -214,12 +213,12 @@ class Request(object):
     # otherwise I'm getting empty wsgi.input
     def _post_cache(self):
         """cache content of wsgi.input on __init__"""
-        self.post_cache = ''
+        from cStringIO import StringIO
+        self.post_cache = StringIO('')
         if self.environ.get('REQUEST_METHOD') == 'POST':
-            if self.environ.get('wsgi.input',''):
-                from cStringIO import StringIO
-                body = StringIO(self.environ.get('wsgi.input').read(int(self.content_length)))
-                self.post_cache = body.read()
+            if self.environ.get('wsgi.input', None):
+                self.post_cache = StringIO(self.environ['wsgi.input'].read(int(self.content_length)))
+                self.form = cgi.FieldStorage(fp=self.post_cache, environ=self.environ, keep_blank_values=True)
 
     @property
     def base_url(self):
@@ -245,7 +244,11 @@ class Request(object):
 
     @property
     def post(self):
-        return dictify(self.post_cache)
+        if self.environ.get('wsgi.input',None):
+            return self.form
+        else:
+            return None
+        #return cgi.FieldStorage(self.post_cache)
 
     @property
     def query_string(self):
@@ -261,13 +264,10 @@ class Request(object):
         return """
             base_url: {base}
             method: {meth}
-            post: {post}
-            query_string: {qs} 
             cookie: {cook} 
             path_info: {pi}
             path: {pth}""".format(
                             base=self.base_url, meth=self.method, 
-                            post=str(self.post), qs=str(self.query_string), 
                             cook=str(self.cookie), pi=self.path_info, 
                             pth=str(self.path)
         ) 
@@ -310,9 +310,8 @@ class Template(object):
         from string import Template
         t = Template(self.html)
         try:
-            from cgi import escape
             for key in values:
-                escape(values[key])
+                cgi.escape(values[key])
             page = t.substitute(values)
         except KeyError:
             log('Template: Template key errors: %s' %str(values))
@@ -377,41 +376,41 @@ class Wsgi(object):
         request = Request(environ)
         response = Response(request)
 
-        module, cls = self.get_route(request.path_info)
-        app = self.get_app(module, cls, request, response)
+        module, cls = self.get_route(request.path_info, config.ROUTES)
+        app = self.get_app(module, cls, request, response, config.APP_PATH)
         response_echo = response.show(self.render_app_method(app, request.method))
         response.header.add_cookie(request.cookie)
 
         start_response(*response.header.pack[:2])
         return response_echo
                 
-    def get_route(self, path_info):
-        for route in config.ROUTES:
+    def get_route(self, path_info, routes):
+        for route in routes:
             url, module, cls = route.split('__')
             if url == path_info:
                 return (module, cls)
         else:
             raise RouteNotFoundException('No route found, check that {0} matches with config.ROUTE'.format(path_info))
 
-    def get_app(self, module, cls, request, response):
+    def get_app(self, module, cls, request, response, app_path):
         """
             create an app object 
             NOTES:
             @see http://technogeek.org/python-module.html 
             @see http://docs.python.org/library/functions.html#__import__
         """
-        app_exists = lambda m: os.path.isfile( os.path.join(config.APP_PATH, '{0}.{1}'.format(m, 'py')) )
+        app_exists = lambda m: os.path.isfile( os.path.join(app_path, '{0}.{1}'.format(m, 'py')) )
 
         if not app_exists(module):
-            raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, config.APP_PATH))
+            raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, app_path))
         else:
-            sys.path.append(config.APP_PATH)
+            sys.path.append(app_path)
             try:
                 __import__(module)
                 app_module = sys.modules[module]
                 app_cls = getattr(app_module, cls)
             except ImportError:
-                raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, config.APP_PATH))
+                raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, app_path))
             except AttributeError:
                 raise AppNotFoundException('App class {0} not found in module {1}'.format(cls, module))
             return app_cls(request, response)

@@ -1,4 +1,3 @@
-import __init__
 import unittest
 from pykaboo.pyka import Header
 

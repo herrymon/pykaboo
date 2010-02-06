@@ -1,5 +1,5 @@
-import __init__
 import unittest
+from cStringIO import StringIO
 from pykaboo.pyka import Request
 from pykaboo.pyka import HTTPRequestException
 
@@ -19,18 +19,14 @@ class TestRequestAttributes(unittest.TestCase):
             'SCRIPT_NAME': '',
             'QUERY_STRING': ''
         }
-        post_file = 'post.dat'
-        post_handle = open(post_file, 'w')
         self.post_str = 'city=Manila&coffee=dark&colors=blue&colors=green'
-        post_handle.write(self.post_str)
-        post_handle.close()
         environ_post = {
             'CONTENT_LENGTH': len(self.post_str),
             'PATH_INFO': '/form',
             'HTTP_COOKIE': '',
             'REQUEST_METHOD': 'POST',
             'wsgi.url_scheme': 'http',
-            'wsgi.input':open(post_file),
+            'wsgi.input':StringIO(self.post_str),
             'HTTP_HOST': 'localhost',
             'HTTP_COOKIE': '',
             'SCRIPT_NAME': '',
@@ -70,10 +66,13 @@ class TestRequestAttributes(unittest.TestCase):
     def test_init_post(self):
         actual = self.request_get.post
         self.assertFalse(actual)
-        self.assertEqual(actual, {})
+        self.assertEqual(actual, None)
         actual = self.request_post.post
         self.assertTrue(actual)
-        self.assertEqual(actual, {'city':['Manila'], 'coffee':['dark'], 'colors':['blue','green']})
+        actual = self.request_post.post['city'].value
+        self.assertEqual('Manila', actual)
+        actual = self.request_post.post.getlist('colors')
+        self.assertEqual(actual, ['blue','green'])
 
     def test_init_cookie(self):
         from Cookie import SimpleCookie
