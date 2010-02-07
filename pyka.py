@@ -174,7 +174,7 @@ class Database(object):
 class Response(object):
     """
         wsgi Response, wraps a Request object,
-        use this for start_response
+        param for start_response
     """
     def __init__(self, request, ctype=None):
         self.request = request
@@ -390,7 +390,7 @@ class Wsgi(object):
             if url == path_info:
                 return (module, cls)
         else:
-            raise RouteNotFoundException('No route found, check that {0} matches with config.ROUTE'.format(path_info))
+            raise RouteNotFoundException('No route found, check that {0} matches with ROUTE'.format(path_info))
 
     def get_app(self, module, cls, request, response, app_path):
         """
@@ -419,7 +419,7 @@ class Wsgi(object):
         try:
             app_method = getattr(app, method)
         except AttributeError:
-            raise AppMethodNotFoundException('App class {0} has no method {1}'.format(cls, method))
+            raise AppMethodNotFoundException('App class {0} has no method {1}'.format(app.__class__.__name__, method))
         return app_method()
 
 
