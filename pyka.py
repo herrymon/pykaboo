@@ -1,7 +1,7 @@
 """
 desc:
 an attempt at a tiny wsgi framework, 
-status: barely usable
+status: usable
 
 inspired by:
 Ian Bicking tutorial - http://pythonpaste.org/webob/do-it-yourself.html, 
@@ -93,12 +93,12 @@ def expires_in(**kwargs):
     @see rf2109 10.1.2"""
     from time import time, gmtime, strftime
     total_secs = (
-        kwargs.get('day', 0) * 24 * 60 * 60,
-        kwargs.get('hour', 0) * 60 * 60,
-        kwargs.get('min', 0) * 60,
-        kwargs.get('sec', 0),
+        kwargs.pop('day', 0) * 24 * 60 * 60,
+        kwargs.pop('hour', 0) * 60 * 60,
+        kwargs.pop('min', 0) * 60,
+        kwargs.pop('sec', 0)
     )
-    expiry_time = gmtime(kwargs.get('time', time()) + sum(total_secs))
+    expiry_time = gmtime(kwargs.pop('time', time()) + sum(total_secs))
     return strftime('%a, %d-%b-%Y %H:%M:%S GMT', expiry_time)
 
 
@@ -140,6 +140,19 @@ def dictify(input_text):
     for key in dict_input:
         dict_input[key] = [cgi.escape(val) for val in dict_input[key]]
     return dict_input
+
+def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
+    """
+        wrap mako.TemplateLookup.get_template and mako.Template.render
+        @see http://www.makotemplates.org/
+    """
+    from mako.template import Template
+    from mako.lookup import TemplateLookup
+    tpaths = template_paths if template_paths else [config.TEMPLATES_PATH]
+    mpath = module_path if module_path else os.path.join(config.PYKA_PATH, 'tmp')
+    lookup = TemplateLookup(directories=tpaths, module_directory=mpath)
+    template = lookup.get_template(template_name)
+    return template.render(**kwargs)
 
 # Database class
 class Database(object):
@@ -327,7 +340,6 @@ class App(object):
     def __init__(self, request, response):
         self.request = request
         self.response = response
-
 
     @property
     def POST(self):
