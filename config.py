@@ -14,11 +14,12 @@ DATABASE_DRIVER = 'sqlite3'
 DATABASE_PATH = os.path.join(PYKA_PATH, 'data')
 DATABASE_FILE = os.path.join(DATABASE_PATH, 'butiki')
 
-# <path>__<script>__<App class>
+# <regex_path>__<script>__<App class>
 ROUTES = (
-    "/__a__Content",
-    "/content__a__Content",
-    "/test__a__Test",
-    "/foo__a__Foo",
-    "/mia__mia__Mia"
+    r"/__a__Content",
+    r"/foo/[a-z]__a__Foo",
+    r"/content__a__Content",
+    r"/test__a__Test",
+    r"/mia__mia__Mia",
+    r"/mako__a__MakoTest"
 )

@@ -45,10 +45,10 @@ class AppNotFoundException(Exception): pass
 class AppMethodNotFoundException(Exception): pass
 class DbNotSupportedException(Exception): pass
 
-# via pylonsbook @see http://pylonsbook.com/en/1.1/the-web-server-gateway-interface-wsgi.html#handling-errors 
 class ErrorMiddleware(object):
     """
         wsgi middleware to handle exceptions in wsgi app
+        via pylonsbook @see http://pylonsbook.com/en/1.1/the-web-server-gateway-interface-wsgi.html#handling-errors
     """
     TEMPLATE = """
             <html>
@@ -87,20 +87,6 @@ class ErrorMiddleware(object):
             traceback.append('%s: %s' % (exc_info[0].__name__, exc_info[1]))
             return "500 INTERNAL SERVER ERROR", "<h1>500 Internal Server Error</h1><pre>{tb}</pre>".format(tb='<br/>'.join(traceback))
 
-# utility functions
-def expires_in(**kwargs):
-    """returns a string date, for cookie 'expires' attribute
-    @see rf2109 10.1.2"""
-    from time import time, gmtime, strftime
-    total_secs = (
-        kwargs.pop('day', 0) * 24 * 60 * 60,
-        kwargs.pop('hour', 0) * 60 * 60,
-        kwargs.pop('min', 0) * 60,
-        kwargs.pop('sec', 0)
-    )
-    expiry_time = gmtime(kwargs.pop('time', time()) + sum(total_secs))
-    return strftime('%a, %d-%b-%Y %H:%M:%S GMT', expiry_time)
-
 
 class LoggingMiddleware(object):
     """
@@ -127,7 +113,20 @@ else:
 
 
 #utility functions
-def dictify(input_text):
+def expires_in(**kwargs):
+    """returns a string date, for cookie 'expires' attribute
+    @see rf2109 10.1.2"""
+    from time import time, gmtime, strftime
+    total_secs = (
+        kwargs.pop('day', 0) * 24 * 60 * 60,
+        kwargs.pop('hour', 0) * 60 * 60,
+        kwargs.pop('min', 0) * 60,
+        kwargs.pop('sec', 0)
+    )
+    expiry_time = gmtime(kwargs.pop('time', time()) + sum(total_secs))
+    return strftime('%a, %d-%b-%Y %H:%M:%S GMT', expiry_time)
+
+def dictify(input_text, escape=None):
     """
         convert wsgi.input to {}, uses built-in urlparse module
         Eg name=Erick&pets=rat&pets=cats to {'name': ['Erick'], 'pets': ['rats', 'cats']}
@@ -153,6 +152,16 @@ def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
     lookup = TemplateLookup(directories=tpaths, module_directory=mpath)
     template = lookup.get_template(template_name)
     return template.render(**kwargs)
+
+def request(*args):
+    """
+        convenience wrapper for request object
+    """
+
+def response(*args):
+    """
+        convenience wrapper for response object
+    """
 
 # Database class
 class Database(object):
@@ -397,9 +406,11 @@ class Wsgi(object):
         return response_echo
                 
     def get_route(self, path_info, routes):
+        import re
         for route in routes:
             url, module, cls = route.split('__')
-            if url == path_info:
+            pattern = re.compile('^{0}$'.format(url)) #must be exact begin-to-end
+            if re.match(pattern, path_info):
                 return (module, cls)
         else:
             raise RouteNotFoundException('No route found, check that {0} matches with ROUTE'.format(path_info))

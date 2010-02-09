@@ -3,6 +3,9 @@ from pykaboo.pyka import expires_in, mako_render
 import os
 
 class TestUtilityFunctions(unittest.TestCase):
+    """
+        under siege: pyka.expires_in, pyka.mako_render
+    """
 
     def setUp(self):
         self.template_path = os.path.realpath(os.path.dirname(__file__))
@@ -27,10 +30,15 @@ class TestUtilityFunctions(unittest.TestCase):
         f.close()
 
     def tearDown(self):
+        files = []
         for tmp_file in (self.template, self.header):
-            os.remove(os.path.join(self.template_path, tmp_file))
-            os.remove(os.path.join(self.template_path, tmp_file + '.py'))
-            os.remove(os.path.join(self.template_path, tmp_file + '.pyc'))
+            tmp = ( os.path.join(self.template_path, tmp_file),
+                    os.path.join(self.template_path, tmp_file + '.py'),
+                    os.path.join(self.template_path, tmp_file + '.pyc') )
+            files.extend( [t for t in tmp if os.path.exists(t)] )
+                        
+        for f in files:
+            os.remove(f)
 
     def test_expires_in(self):
         from time import gmtime, strftime, mktime
@@ -51,7 +59,7 @@ class TestUtilityFunctions(unittest.TestCase):
 
     def test_mako_render(self):
         bdy = "<p>body</p>"
-        html_output = """<html>
+        expected = """<html>
         <head><title>sample file</title></head>
         <body>
         {0}
@@ -62,4 +70,4 @@ class TestUtilityFunctions(unittest.TestCase):
                             template_paths=[self.template_path], 
                             module_path=self.module_path, 
                             body=bdy)
-        self.assertEquals(html_output, actual)
+        self.assertEquals(expected, actual)
