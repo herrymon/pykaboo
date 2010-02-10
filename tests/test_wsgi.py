@@ -29,7 +29,8 @@ class TestWsgi(unittest.TestCase):
         "/__a__Content",
         "/content__a__Content",
         "/test__a__Test",
-        "/foo__a__Foo",
+        "/foo/[a-z]{3}__a__Foo",
+        "/spam/\w{3}/\w{3}__a__Foo",
         "/mia__mia__Mia")
         self.app_path = "/home/erick/labs/py/pykaboo/apps"
 
@@ -39,14 +40,18 @@ class TestWsgi(unittest.TestCase):
         module, cls = wsgi.get_route(path_info, self.routes)
         self.assertEqual(module, 'a')
         self.assertEqual(cls, 'Content')
-        path_info = '/foo'
+        path_info = '/foo/bar'
+        module, cls = wsgi.get_route(path_info, self.routes)
+        self.assertEqual(module, 'a')
+        self.assertEqual(cls, 'Foo')
+        path_info = '/spam/f21/f22'
         module, cls = wsgi.get_route(path_info, self.routes)
         self.assertEqual(module, 'a')
         self.assertEqual(cls, 'Foo')
 
     def test_exception_route_not_found(self):
         wsgi = Wsgi()
-        path_info = '/notfound'
+        path_info = '/foo/notfound'
         self.assertRaises(RouteNotFoundException, wsgi.get_route, path_info, self.routes)
 
     def test_get_app(self):

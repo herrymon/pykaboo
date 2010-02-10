@@ -10,7 +10,8 @@ if __name__ == '__main__':
                     'test_request', 
                     'test_header',
                     'test_utils',
-                    'test_wsgi'
+                    'test_wsgi',
+                    'test_error_middleware'
                    )
     for module in test_modules:
         __import__(module)

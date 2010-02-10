@@ -126,7 +126,7 @@ def expires_in(**kwargs):
     expiry_time = gmtime(kwargs.pop('time', time()) + sum(total_secs))
     return strftime('%a, %d-%b-%Y %H:%M:%S GMT', expiry_time)
 
-def dictify(input_text, escape=None):
+def dictify(input_text, escape=True):
     """
         convert wsgi.input to {}, uses built-in urlparse module
         Eg name=Erick&pets=rat&pets=cats to {'name': ['Erick'], 'pets': ['rats', 'cats']}
@@ -136,8 +136,9 @@ def dictify(input_text, escape=None):
     from urlparse import parse_qs
     dict_input = parse_qs(input_text)
     # use cgi.escape built-in to escape "&<>" input_text 
-    for key in dict_input:
-        dict_input[key] = [cgi.escape(val) for val in dict_input[key]]
+    if escape:
+        for key in dict_input:
+            dict_input[key] = [cgi.escape(val) for val in dict_input[key]]
     return dict_input
 
 def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
@@ -200,7 +201,7 @@ class Response(object):
     """
     def __init__(self, request, ctype=None):
         self.request = request
-        self.output = []
+        self.body = []
         # add default headers
         if ctype:
             self.header = Header('200 OK', ('Content-Type', ctype))
@@ -212,8 +213,8 @@ class Response(object):
             return ""
         else:
             for response in args:
-                self.output.append(response)
-            return "".join(self.output)
+                self.body.append(response)
+            return "".join(self.body)
 
 
 class Request(object):

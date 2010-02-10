@@ -31,18 +31,18 @@ class TestResponseAttributes(unittest.TestCase):
         actual = self.response.request.environ
         self.assertEqual(actual, request.environ)
 
-    def test_init_output(self):
-        actual = self.response.output
+    def test_init_body(self):
+        actual = self.response.body
         expected = []
         self.assertEqual(actual, expected)
 
-    def test_change_output(self):
-        expected = 'test changing the response output'
+    def test_change_body(self):
+        expected = 'test changing the response body'
         actual = self.response.show(expected)
-        self.assertEqual(self.response.output, [expected])
+        self.assertEqual(self.response.body, [expected])
         self.assertEqual(actual, expected)
-        self.response.show('add another output')
-        self.assertEqual(2, len(self.response.output))
+        self.response.show('add another body')
+        self.assertEqual(2, len(self.response.body))
 
 if __name__ == '__main__':
     unittest.main()
