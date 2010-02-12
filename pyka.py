@@ -171,22 +171,23 @@ class Database(object):
         supports only sqlite for now
         @requires python 2.5
     """
-    def connect(self):
+    def connect(self, db_driver, db_file):
         '''returns a connection cursor'''
-        if not config.DATABASE_DRIVER == 'sqlite3':
+        try:
+            __import__(db_driver)
+            self.driver = sys.modules[db_driver]
+        except ImportError:
             raise DbNotSupportedException('only sqlite3 is supported for now')
-        __import__(config.DATABASE_DRIVER)
-        self.driver = sys.modules[config.DATABASE_DRIVER]
             
-        conn = self.driver.connect(os.path.join(config.DATABASE_PATH, config.DATABASE_FILE))
+        conn = self.driver.connect(db_file)
         self.cursor = conn.cursor()
 
     def close(self):
         self.cursor.close()
         self.cursor = None
 
-    def query(self, sql):
-        self.connect()
+    def query(self, sql, db_file, db_driver='sqlite3'):
+        self.connect(db_driver, db_file)
         self.cursor.execute(sql)
         fetch = self.cursor.fetchall()
         self.close()
@@ -394,21 +395,26 @@ class Wsgi(object):
     """
         wsgi application wrapper
     """
+    def __init__(self, routes, app_path, templates_path):
+        self.routes = routes
+        self.app_path = app_path
+        self.templates_path = templates_path
+
     def __call__(self, environ, start_response):
         request = Request(environ)
         response = Response(request)
 
-        module, cls = self.get_route(request.path_info, config.ROUTES)
-        app = self.get_app(module, cls, request, response, config.APP_PATH)
+        module, cls = self.get_route(request.path_info)
+        app = self.get_app(module, cls, request, response)
         response_echo = response.show(self.render_app_method(app, request.method))
         response.header.add_cookie(request.cookie)
 
         start_response(*response.header.pack[:2])
         return response_echo
                 
-    def get_route(self, path_info, routes):
+    def get_route(self, path_info):
         import re
-        for route in routes:
+        for route in self.routes:
             url, module, cls = route.split('__')
             pattern = re.compile('^{0}$'.format(url)) #must be exact begin-to-end
             if re.match(pattern, path_info):
@@ -416,25 +422,25 @@ class Wsgi(object):
         else:
             raise RouteNotFoundException('No route found, check that {0} matches with ROUTE'.format(path_info))
 
-    def get_app(self, module, cls, request, response, app_path):
+    def get_app(self, module, cls, request, response):
         """
             create an app object 
             NOTES:
             @see http://technogeek.org/python-module.html 
             @see http://docs.python.org/library/functions.html#__import__
         """
-        app_exists = lambda m: os.path.isfile( os.path.join(app_path, '{0}.{1}'.format(m, 'py')) )
+        app_exists = lambda m: os.path.isfile( os.path.join(self.app_path, '{0}.{1}'.format(m, 'py')) )
 
         if not app_exists(module):
-            raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, app_path))
+            raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, self.app_path))
         else:
-            sys.path.append(app_path)
+            sys.path.append(self.app_path)
             try:
                 __import__(module)
                 app_module = sys.modules[module]
                 app_cls = getattr(app_module, cls)
             except ImportError:
-                raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, app_path))
+                raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, self.app_path))
             except AttributeError:
                 raise AppNotFoundException('App class {0} not found in module {1}'.format(cls, module))
             return app_cls(request, response)
@@ -447,11 +453,14 @@ class Wsgi(object):
         return app_method()
 
 
-application = ErrorMiddleware(Wsgi())
+def make_app(routes, app_path, template_path):
+    app = Wsgi(routes, app_path, template_path)
+    return ErrorMiddleware(app)
 
 if __name__ == '__main__':
     from wsgiref.simple_server import make_server
     try:
+        application = make_app(config.ROUTES, config.APP_PATH, config.TEMPLATES_PATH)
         httpd = make_server('', 8888, application)
         print "Serving on port 8888\nCtrl + C to quit"
         httpd.serve_forever()
