@@ -34,8 +34,8 @@ __author__ = 'herrymonster@gmail.com'
 __license__ = 'do whatever you want, Ie use at your own risk'
 
 import os, sys, cgi
-sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
-import config
+PYKA_PATH = os.path.realpath(os.path.dirname(__file__))
+# sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
 
 '''errors and logger'''
 class HTTPRequestException(Exception): pass
@@ -63,6 +63,7 @@ class ErrorMiddleware(object):
     """
     def __init__(self, app):
         self.app = app
+        self.handlers = app.handlers
 
     def __call__(self, environ, start_response):
         try:
@@ -98,19 +99,15 @@ class LoggingMiddleware(object):
     def __call__(self, environ, start_response):
         pass
 
-if config.LOG:
-    def log(msg):
-        from datetime import datetime
-        import logging
-        now = datetime.now()
-        log_filename = 'log-{year}-{month}-{day}.log'.format(year=now.year, month=now.month, day=now.day)
-        log_file = os.path.join(config.LOG_PATH, log_filename)
-        logging.basicConfig(filename=log_file, level=logging.DEBUG)
-        logging.debug(msg)
-else:
-    def log(msg): 
-        msg = None
-
+def log(msg):
+    from datetime import datetime
+    import logging
+    now = datetime.now()
+    log_filename = 'log-{year}-{month}-{day}.log'.format(year=now.year, month=now.month, day=now.day)
+    log_path = os.path.join(PYKA_PATH, 'log')
+    log_file = os.path.join(log_path, log_filename)
+    logging.basicConfig(filename=log_file, level=logging.DEBUG)
+    logging.debug(msg)
 
 #utility functions
 def expires_in(**kwargs):
@@ -395,28 +392,34 @@ class Wsgi(object):
     """
         wsgi application wrapper
     """
-    def __init__(self, routes, app_path, templates_path):
-        self.routes = routes
-        self.app_path = app_path
-        self.templates_path = templates_path
+    def __init__(self, file_path=None):
+        self.handlers = {} 
 
     def __call__(self, environ, start_response):
         request = Request(environ)
         response = Response(request)
-
-        module, cls = self.get_route(request.path_info)
-        app = self.get_app(module, cls, request, response)
-        response_echo = response.show(self.render_app_method(app, request.method))
-        response.header.add_cookie(request.cookie)
+        
+        # module, cls = self.get_route(request.path_info)
+        # app = self.get_app(module, cls, request, response)
+        # response_echo = response.show(self.render_app_method(app, request.method))
+        # response.header.add_cookie(request.cookie)
 
         start_response(*response.header.pack[:2])
-        return response_echo
+        handler_func = self.handlers.get(self.route(request.path_info), None)
+        handler_func.path = request.path
+        return handler_func()
                 
+    def route(self, path_info):
+        from re import compile, match
+        for route in self.handlers.keys():
+            pattern = compile('^{0}$'.format(route)) #must be exact begin-to-end
+            if match(pattern, path_info):
+                return route
+            
     def get_route(self, path_info):
         import re
         for route in self.routes:
-            url, module, cls = route.split('__')
-            pattern = re.compile('^{0}$'.format(url)) #must be exact begin-to-end
+            pattern = re.compile('^{0}$'.format(path_info)) #must be exact begin-to-end
             if re.match(pattern, path_info):
                 return (module, cls)
         else:
@@ -453,14 +456,21 @@ class Wsgi(object):
         return app_method()
 
 
-def make_app(routes, app_path, template_path):
-    app = Wsgi(routes, app_path, template_path)
-    return ErrorMiddleware(app)
+application = ErrorMiddleware(Wsgi())
+# application = Wsgi()
 
-if __name__ == '__main__':
+# add route -> function mapping in application
+def bind(route, **kwargs):
+    def decor(fn):
+        for k in kwargs:
+            setattr(fn, k, kwargs[k])
+        application.handlers[route] = fn
+        return fn
+    return decor
+
+def serve(application):
     from wsgiref.simple_server import make_server
     try:
-        application = make_app(config.ROUTES, config.APP_PATH, config.TEMPLATES_PATH)
         httpd = make_server('', 8888, application)
         print "Serving on port 8888\nCtrl + C to quit"
         httpd.serve_forever()
