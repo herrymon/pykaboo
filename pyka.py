@@ -198,21 +198,36 @@ class Response(object):
         param for start_response
     """
     def __init__(self, request, ctype=None):
-        self.request = request
-        self.body = []
+        self.__request = request
+        self.__ctype = ctype if ctype else 'text/html'
+        self.__body = []
         # add default headers
-        if ctype:
-            self.header = Header('200 OK', ('Content-Type', ctype))
-        else:
-            self.header = Header('200 OK', ('Content-Type', 'text/html'))
-            
-    def show(self, *args):
-        if self.request.method == 'HEAD':
+        self.__header = Header('200 OK', ('Content-Type', self.__ctype))
+
+    @property
+    def body(self):
+        if self.__request.method == 'HEAD':
             return ""
         else:
-            for response in args:
-                self.body.append(response)
-            return "".join(self.body)
+            return "".join(self.__body)
+            
+    @property
+    def status(self):
+        return self.__header.pack[0]
+
+    @property
+    def header(self):
+        return self.__header.pack[1]       
+
+    def add(self, *args):
+        from types import StringTypes, FunctionType
+        for response in args:
+            if type(response) is FunctionType:
+                self.add(response())
+            if type(response) is StringTypes:
+                self.__body.append(response)
+            else:
+                self.__body.append(str(response))
 
 
 class Request(object):
@@ -367,16 +382,16 @@ class Header(object):
     """
         status object and response headers packed to use as arg to start_response()
     """
-    def __init__(self, _status, _header):
+    def __init__(self, status, header):
         '''@usage start_response(*header.pack)'''
         self.pack = []
-        self.pack.append(_status)
-        self.pack.append([_header])
+        self.pack.append(status)
+        self.pack.append([header])
         log('Header: Created header[status=%s, header=[%s]]' %(self.pack[0], str(self.pack[1])) )
 
-    def state(self, _status):
+    def state(self, status):
         """usage header.state('404 NOT FOUND')"""
-        self.pack[0] = _status
+        self.pack[0] = status
 
     def add(self, *args):
         """usage header.add('Content-Type', 'text/html')"""
@@ -399,15 +414,12 @@ class Wsgi(object):
         request = Request(environ)
         response = Response(request)
         
-        # module, cls = self.get_route(request.path_info)
-        # app = self.get_app(module, cls, request, response)
-        # response_echo = response.show(self.render_app_method(app, request.method))
-        # response.header.add_cookie(request.cookie)
-
-        start_response(*response.header.pack[:2])
         handler_func = self.handlers.get(self.route(request.path_info), None)
         handler_func.path = request.path
-        return handler_func()
+        response.add(handler_func, self.handlers)
+
+        start_response(response.status, response.header)
+        return response.body
                 
     def route(self, path_info):
         from re import compile, match
@@ -415,39 +427,9 @@ class Wsgi(object):
             pattern = compile('^{0}$'.format(route)) #must be exact begin-to-end
             if match(pattern, path_info):
                 return route
+        else:
+            raise RouteNotFoundException("No handler found for route: {0}".format(path_info))
             
-    def get_route(self, path_info):
-        import re
-        for route in self.routes:
-            pattern = re.compile('^{0}$'.format(path_info)) #must be exact begin-to-end
-            if re.match(pattern, path_info):
-                return (module, cls)
-        else:
-            raise RouteNotFoundException('No route found, check that {0} matches with ROUTE'.format(path_info))
-
-    def get_app(self, module, cls, request, response):
-        """
-            create an app object 
-            NOTES:
-            @see http://technogeek.org/python-module.html 
-            @see http://docs.python.org/library/functions.html#__import__
-        """
-        app_exists = lambda m: os.path.isfile( os.path.join(self.app_path, '{0}.{1}'.format(m, 'py')) )
-
-        if not app_exists(module):
-            raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, self.app_path))
-        else:
-            sys.path.append(self.app_path)
-            try:
-                __import__(module)
-                app_module = sys.modules[module]
-                app_cls = getattr(app_module, cls)
-            except ImportError:
-                raise AppNotFoundException('App module {0} not found in APP_PATH {1}'.format(module, self.app_path))
-            except AttributeError:
-                raise AppNotFoundException('App class {0} not found in module {1}'.format(cls, module))
-            return app_cls(request, response)
-
     def render_app_method(self, app, method):
         try:
             app_method = getattr(app, method)
@@ -457,10 +439,12 @@ class Wsgi(object):
 
 
 application = ErrorMiddleware(Wsgi())
-# application = Wsgi()
 
-# add route -> function mapping in application
 def bind(route, **kwargs):
+    """
+        add handler mapping to Wsgi instance
+        { route : handler }
+    """
     def decor(fn):
         for k in kwargs:
             setattr(fn, k, kwargs[k])
@@ -468,12 +452,13 @@ def bind(route, **kwargs):
         return fn
     return decor
 
-def serve(application):
-    from wsgiref.simple_server import make_server
+def serve(application, port=8080):
     try:
-        httpd = make_server('', 8888, application)
-        print "Serving on port 8888\nCtrl + C to quit"
+        from wsgiref.simple_server import make_server
+        httpd = make_server('', port, application)
+        print "Serving on port {0}\nCtrl + C to quit".format(port)
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print "\nShutting down server on port 88888"
+        print "\nShutting down server on port {0}".format(port)
 
+#end of pyka.py
