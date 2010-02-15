@@ -39,9 +39,9 @@ PYKA_PATH = os.path.realpath(os.path.dirname(__file__))
 # sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
 
 '''errors and logger'''
-class HTTPRequestException(Exception): pass
+class UnknownHTTPMethod(Exception): pass
 class TemplateNotFoundException(Exception): pass
-class RouteNotFoundException(Exception): pass
+class RouteNotFound(Exception): pass
 class AppNotFoundException(Exception): pass
 class AppMethodNotFoundException(Exception): pass
 class DbNotSupportedException(Exception): pass
@@ -72,7 +72,7 @@ class ErrorMiddleware(object):
         except:
             # @see http://lucumr.pocoo.org/2007/5/21/getting-started-with-wsgi 
             exc_info = sys.exc_info()
-            if exc_info[0].__name__ == RouteNotFoundException.__name__:
+            if exc_info[0].__name__ == RouteNotFound.__name__:
                 header, message = self.error_404(exc_info)
             else:
                 header, message = self.error_500(exc_info)
@@ -278,7 +278,7 @@ class Request(object):
         if method in supported_methods:
             return method.lower() # why lower? need to map this later to App method Eg def get(self)...
         else:
-            raise HTTPRequestException('method is not supported. Only GET and POST is supported at the moment...')
+            raise UnknownHTTPMethod('method is not supported. Only GET and POST is supported at the moment...')
 
     @property
     def path(self):
@@ -363,23 +363,6 @@ class Template(object):
         return page
 
 
-class App(object):
-    """
-        All apps inherit App. Do not forget to set APP_PATH in config.py
-    """
-    def __init__(self, request, response):
-        self.request = request
-        self.response = response
-
-    @property
-    def POST(self):
-        return self.request.post
-
-    @property
-    def QUERY_STRING(self):
-        return self.request.query_string
-
-
 class Header(object):
     """
         status object and response headers packed to use as arg to start_response()
@@ -423,7 +406,8 @@ class Wsgi(object):
         response = Response(request)
         
         handler_func = self.handlers.get(self.route(request.path_info), None)
-        handler_func.path = request.path
+        handler_func.request = request
+        handler_func.response = response
         response.add(handler_func, self.handlers)
 
         start_response(response.status, response.header)
@@ -436,16 +420,8 @@ class Wsgi(object):
             if match(pattern, path_info):
                 return route
         else:
-            raise RouteNotFoundException("No handler found for route: {0}".format(path_info))
+            raise RouteNotFound("No handler found for route: {0}".format(path_info))
             
-    def render_app_method(self, app, method):
-        try:
-            app_method = getattr(app, method)
-        except AttributeError:
-            raise AppMethodNotFoundException('App class {0} has no method {1}'.format(app.__class__.__name__, method))
-        return app_method()
-
-
 application = ErrorMiddleware(Wsgi())
 
 def bind(route, **kwargs):
