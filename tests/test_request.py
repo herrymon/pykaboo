@@ -1,7 +1,7 @@
 import unittest
 from cStringIO import StringIO
 from pykaboo.pyka import Request
-from pykaboo.pyka import HTTPRequestException
+from pykaboo.pyka import UnknownHTTPMethod
 
 class TestRequestAttributes(unittest.TestCase):
     """
