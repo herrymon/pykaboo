@@ -32,6 +32,7 @@ requires python 2.5
 __version__ = '0.1'
 __author__ = 'herrymonster@gmail.com'
 __license__ = 'do whatever you want, Ie use at your own risk'
+__all__ = ['application', 'bind', 'Request', 'Response', 'mako_render']
 
 import os, sys, cgi
 PYKA_PATH = os.path.realpath(os.path.dirname(__file__))
@@ -213,11 +214,11 @@ class Response(object):
             
     @property
     def status(self):
-        return self.__header.pack[0]
+        return self.__header.status
 
     @property
     def header(self):
-        return self.__header.pack[1]       
+        return self.__header.headers       
 
     def add(self, *args):
         from types import StringTypes, FunctionType
@@ -228,6 +229,12 @@ class Response(object):
                 self.__body.append(response)
             else:
                 self.__body.append(str(response))
+
+    def redirect(self, url_append, code=None):
+        code = '303 SEE OTHER' if not code else code
+        self.response.header.state(code)
+        self.response.header.add('Location', self.request.base_url + url_append)
+
 
 
 class Request(object):
@@ -372,11 +379,6 @@ class App(object):
     def QUERY_STRING(self):
         return self.request.query_string
 
-    def redirect(self, url_append, code=None):
-        code = '303 SEE OTHER' if not code else code
-        self.response.header.state(code)
-        self.response.header.add('Location', self.request.base_url + url_append)
-
 
 class Header(object):
     """
@@ -384,19 +386,25 @@ class Header(object):
     """
     def __init__(self, status, header):
         '''@usage start_response(*header.pack)'''
-        self.pack = []
-        self.pack.append(status)
-        self.pack.append([header])
-        log('Header: Created header[status=%s, header=[%s]]' %(self.pack[0], str(self.pack[1])) )
+        self.__status = status
+        self.__headers = [header]
+        log('Header: Created header: {0}, {1}'.format(self.__status, str(self.__headers)) )
+
+    @property
+    def status(self):
+        return self.__status
+
+    @property
+    def headers(self):
+        return self.__headers
 
     def state(self, status):
         """usage header.state('404 NOT FOUND')"""
-        self.pack[0] = status
+        self.__status = status
 
     def add(self, *args):
         """usage header.add('Content-Type', 'text/html')"""
-        if args:
-            self.pack[1].append(args)
+        self.__headers.append(args)
 
     def add_cookie(self, cookie):
         for key in cookie:
