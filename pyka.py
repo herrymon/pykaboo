@@ -147,8 +147,8 @@ def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
     """
     from mako.template import Template
     from mako.lookup import TemplateLookup
-    tpaths = template_paths if template_paths else [config.TEMPLATES_PATH]
-    mpath = module_path if module_path else os.path.join(config.PYKA_PATH, 'tmp')
+    tpaths = template_paths if template_paths else [PYKA_PATH]
+    mpath = module_path if module_path else os.path.join(PYKA_PATH, 'tmp')
     lookup = TemplateLookup(directories=tpaths, module_directory=mpath)
     template = lookup.get_template(template_name)
     return template.render(**kwargs)
