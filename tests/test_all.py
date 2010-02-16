@@ -8,7 +8,6 @@ if __name__ == '__main__':
     test_modules = (
                     'test_response', 
                     'test_request', 
-                    'test_header',
                     'test_utils',
                     'test_wsgi',
                     'test_error_middleware'

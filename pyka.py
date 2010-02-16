@@ -139,6 +139,7 @@ def dictify(input_text, escape=True):
             dict_input[key] = [cgi.escape(val) for val in dict_input[key]]
     return dict_input
 
+
 def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
     """
         wrap mako.TemplateLookup.get_template and mako.Template.render
@@ -152,15 +153,6 @@ def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
     template = lookup.get_template(template_name)
     return template.render(**kwargs)
 
-def request(*args):
-    """
-        convenience wrapper for request object
-    """
-
-def response(*args):
-    """
-        convenience wrapper for response object
-    """
 
 # Database class
 class Database(object):
@@ -203,7 +195,7 @@ class Response(object):
         self.__ctype = ctype if ctype else 'text/html'
         self.__body = []
         # add default headers
-        self.__header = Header('200 OK', ('Content-Type', self.__ctype))
+        self.__header = ('200 OK', [('Content-Type', self.__ctype)])
 
     @property
     def body(self):
@@ -214,11 +206,11 @@ class Response(object):
             
     @property
     def status(self):
-        return self.__header.status
+        return self.__header[0]
 
     @property
     def header(self):
-        return self.__header.headers       
+        return self.__header[1]
 
     def add(self, *args):
         from types import StringTypes, FunctionType
@@ -229,6 +221,13 @@ class Response(object):
                 self.__body.append(response)
             else:
                 self.__body.append(str(response))
+
+    def add_cookie(self, cookie):
+        """
+           add Set-Cookie headers
+        """
+        for key in cookie:
+            self.__header[1].append(('Set-Cookie', cookie[key].OutputString()))
 
     def redirect(self, url_append, code=None):
         code = '303 SEE OTHER' if not code else code
@@ -343,7 +342,7 @@ class Template(object):
         try:
             self.echo = echo
             tpl = os.path.join(config.TEMPLATES_PATH, tfile)
-            fp = open(tpl)
+            fp = open(tpl, 'rt', encoding='utf-8')
             self.html = fp.read()
             fp.close()
         except IOError:
@@ -363,37 +362,6 @@ class Template(object):
         return page
 
 
-class Header(object):
-    """
-        status object and response headers packed to use as arg to start_response()
-    """
-    def __init__(self, status, header):
-        '''@usage start_response(*header.pack)'''
-        self.__status = status
-        self.__headers = [header]
-        log('Header: Created header: {0}, {1}'.format(self.__status, str(self.__headers)) )
-
-    @property
-    def status(self):
-        return self.__status
-
-    @property
-    def headers(self):
-        return self.__headers
-
-    def state(self, status):
-        """usage header.state('404 NOT FOUND')"""
-        self.__status = status
-
-    def add(self, *args):
-        """usage header.add('Content-Type', 'text/html')"""
-        self.__headers.append(args)
-
-    def add_cookie(self, cookie):
-        for key in cookie:
-            self.add('Set-Cookie', cookie[key].OutputString())
-
-
 class Wsgi(object):
     """
         wsgi application wrapper
@@ -402,6 +370,7 @@ class Wsgi(object):
         self.handlers = {} 
 
     def __call__(self, environ, start_response):
+        sys.stderr.write('call Wsgi...\n')
         request = Request(environ)
         response = Response(request)
         

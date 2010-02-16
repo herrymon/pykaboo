@@ -1,7 +1,5 @@
 import unittest
-from pykaboo.pyka import Response
-from pykaboo.pyka import Request
-from pykaboo.pyka import Header
+from pykaboo.pyka import Response, Request
 
 class TestResponseAttributes(unittest.TestCase):
     """
