@@ -11,9 +11,7 @@ concepts, ideas borrowed from:
 webob - http://bitbucket.org/ianb/webob/ 
 werkzeug - http://werkzeug.pocoo.org/
 bottle.py - http://github.com/defnull/bottle.
-web.py - http://webpy.org/
-pylons -http://pylonshq.com/ 
-django - http://www.djangoproject.com
+bobo - http://bobo.digicool.com/ 
 
 bookmarks:
 http1.1 - http://www.w3.org/Protocols/rfc2616/rfc2616.html
@@ -40,10 +38,9 @@ PYKA_PATH = os.path.realpath(os.path.dirname(__file__))
 
 '''errors and logger'''
 class UnknownHTTPMethod(Exception): pass
+class InvalidHTTPMethod(Exception): pass
 class TemplateNotFoundException(Exception): pass
 class RouteNotFound(Exception): pass
-class AppNotFoundException(Exception): pass
-class AppMethodNotFoundException(Exception): pass
 class DbNotSupportedException(Exception): pass
 
 class ErrorMiddleware(object):
@@ -247,7 +244,7 @@ class Request(object):
         self._post_cache()
         from Cookie import SimpleCookie
         self.cookie = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
-        for key in self.environ:
+        for key in self.environ.iterkeys():
             log('{k} -> {v}'.format(k=key, v=str(self.environ[key])))
         log(self.debug)
 
@@ -275,7 +272,7 @@ class Request(object):
         supported_methods = ('GET', 'POST')
         method = self.environ.get('REQUEST_METHOD', 'GET')
         if method in supported_methods:
-            return method.lower() # why lower? need to map this later to App method Eg def get(self)...
+            return method
         else:
             raise UnknownHTTPMethod('method is not supported. Only GET and POST is supported at the moment...')
 
@@ -370,8 +367,9 @@ class Wsgi(object):
         self.handlers = {} 
 
     def __call__(self, environ, start_response):
-        sys.stderr.write('call Wsgi...\n')
+        sys.stderr.write('path info {0}\n'.format(environ.get('PATH_INFO','')))
         request = Request(environ)
+        self.method = request.method
         response = Response(request)
         
         handler_func = self.handlers.get(self.route(request.path_info), None)
@@ -384,26 +382,35 @@ class Wsgi(object):
                 
     def route(self, path_info):
         from re import compile, match
-        for route in self.handlers.keys():
-            pattern = compile('^{0}$'.format(route)) #must be exact begin-to-end
+        for route in self.handlers.iterkeys():
+            path, method = route
+            pattern = compile('^{0}$'.format(path)) #must be exact begin-to-end
             if match(pattern, path_info):
-                return route
+                if method == self.method:
+                    return route
+                else:
+                    raise InvalidHTTPMethod('Expecting HTTP method {0}, found {1}'.format(method, self.method))
         else:
             raise RouteNotFound("No handler found for route: {0}".format(path_info))
             
+
 application = ErrorMiddleware(Wsgi())
 
-def bind(route, **kwargs):
+def bind(route, app, method):
     """
         add handler mapping to Wsgi instance
         { route : handler }
     """
     def decor(fn):
-        for k in kwargs:
-            setattr(fn, k, kwargs[k])
-        application.handlers[route] = fn
+        app.handlers[(route, method)] = fn
         return fn
     return decor
+
+def post(route):
+    return bind(route, application, 'POST')
+
+def get(route):
+    return bind(route, application, 'GET')
 
 def serve(application, port=8080):
     try:
