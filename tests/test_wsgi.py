@@ -1,8 +1,14 @@
 import unittest
 import os.path
-from pykaboo.pyka import Request, Response, Wsgi, bind
+from pykaboo.pyka import Request, Response, Wsgi, bind, HandlerKey
 from pykaboo.pyka import RouteNotFound
 
+# sample app
+def index():
+    return 'index'
+
+def test():
+    return 'test'
 
 
 class TestWsgi(unittest.TestCase):
@@ -26,20 +32,14 @@ class TestWsgi(unittest.TestCase):
         self.response = Response(self.request)
         self.wsgi = Wsgi()
 
-        # sample app
-        def index():
-            return 'index'
-
-        def test():
-            return 'test'
-
-        self.wsgi.handlers = {'/': index, '/test': test}
+        self.wsgi.handlers = {HandlerKey('/','GET'): index, HandlerKey('/test','GET'): test}
+        self.wsgi.method = 'GET'
 
     def test_ok_get_route(self):
         path_info = '/'
-        self.assertEquals(self.wsgi.route(path_info), path_info)
+        self.assertEquals(self.wsgi.route(path_info), HandlerKey('/','GET'))
         path_info = '/test'
-        self.assertEquals(self.wsgi.route(path_info), path_info)
+        self.assertEquals(self.wsgi.route(path_info), HandlerKey('/test','GET'))
 
     def test_raises_route_not_found(self):
         path_info = '/notfound'

@@ -33,6 +33,7 @@ __license__ = 'do whatever you want, Ie use at your own risk'
 __all__ = ['application', 'bind', 'Request', 'Response', 'mako_render']
 
 import os, sys, cgi
+from collections import namedtuple
 PYKA_PATH = os.path.realpath(os.path.dirname(__file__))
 # sys.path.append(os.path.dirname(__file__))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
 
@@ -150,6 +151,8 @@ def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
     template = lookup.get_template(template_name)
     return template.render(**kwargs)
 
+# keys for handler_func in class Wsgi
+HandlerKey = namedtuple('HandlerKey', ['path','method'])
 
 # Database class
 class Database(object):
@@ -400,8 +403,6 @@ def bind(route, app, method):
         add handler mapping to Wsgi instance
         { HandlerKey : handler_func }
     """
-    from collections import namedtuple
-    HandlerKey = namedtuple('HandlerKey', ['path','method'])
     def decor(fn):
         app.handlers[HandlerKey(route, method)] = fn
         return fn

@@ -37,9 +37,9 @@ class TestRequestAttributes(unittest.TestCase):
 
     def test_init_method(self):
         actual = self.request_get.method
-        self.assertEqual(actual, 'get')
+        self.assertEqual(actual, 'GET')
         actual = self.request_post.method
-        self.assertEqual(actual, 'post')
+        self.assertEqual(actual, 'POST')
 
     def test_init_base_url(self):
         actual = self.request_get.base_url
