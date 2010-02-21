@@ -383,10 +383,9 @@ class Wsgi(object):
     def route(self, path_info):
         from re import compile, match
         for route in self.handlers.iterkeys():
-            path, method = route
-            pattern = compile('^{0}$'.format(path)) #must be exact begin-to-end
+            pattern = compile('^{0}$'.format(route.path)) #must be exact begin-to-end
             if match(pattern, path_info):
-                if method == self.method:
+                if route.method == self.method:
                     return route
                 else:
                     raise InvalidHTTPMethod('Expecting HTTP method {0}, found {1}'.format(method, self.method))
@@ -399,10 +398,12 @@ application = ErrorMiddleware(Wsgi())
 def bind(route, app, method):
     """
         add handler mapping to Wsgi instance
-        { route : handler }
+        { HandlerKey : handler_func }
     """
+    from collections import namedtuple
+    HandlerKey = namedtuple('HandlerKey', ['path','method'])
     def decor(fn):
-        app.handlers[(route, method)] = fn
+        app.handlers[HandlerKey(route, method)] = fn
         return fn
     return decor
 
