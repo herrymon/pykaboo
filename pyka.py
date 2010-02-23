@@ -74,7 +74,7 @@ class ErrorMiddleware(object):
                 header, message = self.error_404(exc_info)
             else:
                 header, message = self.error_500(exc_info)
-            start_response(header, [('Content-Type', 'text/html')], exc_info)
+            start_response(header, [('Content-Type', 'text/html; charset=UTF-8')], exc_info)
             return ErrorMiddleware.TEMPLATE.format(body=message, title=header)
 
     def error_404(self, exc_info):
@@ -98,6 +98,7 @@ class LoggingMiddleware(object):
     def __call__(self, environ, start_response):
         pass
 
+#utility functions
 def log(msg):
     from datetime import datetime
     import logging
@@ -108,7 +109,6 @@ def log(msg):
     logging.basicConfig(filename=log_file, level=logging.DEBUG)
     logging.debug(msg)
 
-#utility functions
 def expires_in(**kwargs):
     """returns a string date, for cookie 'expires' attribute
     @see rf2109 10.1.2"""
@@ -145,14 +145,18 @@ def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
     """
     from mako.template import Template
     from mako.lookup import TemplateLookup
-    tpaths = template_paths if template_paths else [PYKA_PATH]
-    mpath = module_path if module_path else os.path.join(PYKA_PATH, 'tmp')
-    lookup = TemplateLookup(directories=tpaths, module_directory=mpath)
+    if template_paths:
+        tpath = template_paths
+    else:
+        tpath = [PYKA_PATH]
+    if module_path:
+        mpath = module_path
+    else:
+        mpath = os.path.join(PYKA_PATH, 'tmp')
+    lookup = TemplateLookup(directories=tpath, module_directory=mpath)
     template = lookup.get_template(template_name)
     return template.render(**kwargs)
 
-# keys for handler_func in class Wsgi
-HandlerKey = namedtuple('HandlerKey', ['path','method'])
 
 # Database class
 class Database(object):
@@ -176,9 +180,12 @@ class Database(object):
         self.cursor.close()
         self.cursor = None
 
-    def query(self, sql, db_file, db_driver='sqlite3'):
+    def query(self, sql, db_file, sql_params=None, db_driver='sqlite3'):
         self.connect(db_driver, db_file)
-        self.cursor.execute(sql)
+        if sql_params:
+            self.cursor.execute(sql, sql_params)
+        else:
+            self.cursor.execute(sql)
         fetch = self.cursor.fetchall()
         self.close()
         return fetch
@@ -192,7 +199,10 @@ class Response(object):
     """
     def __init__(self, request, ctype=None):
         self.__request = request
-        self.__ctype = ctype if ctype else 'text/html'
+        if ctype:
+            self.__ctype = ctype
+        else:
+            self.__ctype = 'text/html; charset=UTF-8'
         self.__body = []
         # add default headers
         self.__header = ('200 OK', [('Content-Type', self.__ctype)])
@@ -230,7 +240,8 @@ class Response(object):
             self.__header[1].append(('Set-Cookie', cookie[key].OutputString()))
 
     def redirect(self, url_append, code=None):
-        code = '303 SEE OTHER' if not code else code
+        if not code:
+            code = '303 SEE OTHER'
         self.response.header.state(code)
         self.response.header.add('Location', self.request.base_url + url_append)
 
@@ -335,13 +346,15 @@ class Request(object):
 
 class Template(object):
     """
-        instantiate with filename of html template file. Do not forget to set TEMPLATE_PATH in config.py. 
+        instantiate with filename of html template file
         wrapper for string.Template @see http://docs.python.org/library/string.html#template-strings
     """
-    def __init__(self, tfile, echo=True):
+    def __init__(self, tfile, tpath=None, echo=True):
+        if not tpath:
+            tpath = PYKA_PATH
         try:
             self.echo = echo
-            tpl = os.path.join(config.TEMPLATES_PATH, tfile)
+            tpl = os.path.join(tpath, tfile)
             fp = open(tpl, 'rt', encoding='utf-8')
             self.html = fp.read()
             fp.close()
@@ -362,6 +375,9 @@ class Template(object):
         return page
 
 
+# keys for handler_func in class Wsgi
+HandlerKey = namedtuple('HandlerKey', ['path','method'])
+
 class Wsgi(object):
     """
         wsgi application wrapper
@@ -378,16 +394,16 @@ class Wsgi(object):
         handler_func = self.handlers.get(self.route(request.path_info), None)
         handler_func.request = request
         handler_func.response = response
-        response.add(handler_func, self.handlers)
+        response.add(handler_func)
 
         start_response(response.status, response.header)
         return response.body
                 
     def route(self, path_info):
-        from re import compile, match
+        from re import compile, search
         for route in self.handlers.iterkeys():
             pattern = compile('^{0}$'.format(route.path)) #must be exact begin-to-end
-            if match(pattern, path_info):
+            if search(pattern, path_info):
                 if route.method == self.method:
                     return route
                 else:
