@@ -1,7 +1,7 @@
 import unittest
 from cStringIO import StringIO
 from pykaboo.pyka import Request
-from pykaboo.pyka import UnknownHTTPMethod
+from pykaboo.pyka import InvalidHTTPMethod
 
 class TestRequestAttributes(unittest.TestCase):
     """
@@ -63,15 +63,13 @@ class TestRequestAttributes(unittest.TestCase):
         self.assertFalse(actual)
         self.assertEqual(actual, {})
 
+    def test_exception_post(self):
+        self.assertRaises(InvalidHTTPMethod, self.request_get.post, 'test')
+
     def test_init_post(self):
-        actual = self.request_get.post
-        self.assertFalse(actual)
-        self.assertEqual(actual, None)
-        actual = self.request_post.post
-        self.assertTrue(actual)
-        actual = self.request_post.post['city'].value
+        actual = self.request_post.post('city')
         self.assertEqual('Manila', actual)
-        actual = self.request_post.post.getlist('colors')
+        actual = self.request_post.post('colors')
         self.assertEqual(actual, ['blue','green'])
 
     def test_init_cookie(self):

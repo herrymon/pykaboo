@@ -22,7 +22,7 @@ class TestResponseAttributes(unittest.TestCase):
     def test_init_headers(self):
         expected = '200 OK'
         self.assertEqual(expected, self.response.status)
-        expected = [('Content-Type', 'text/html')]
+        expected = [('Content-Type', 'text/html; charset=UTF-8')]
         self.assertEqual(expected, self.response.header)
 
     def test_init_body(self):
