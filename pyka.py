@@ -259,7 +259,7 @@ class Request(object):
         from Cookie import SimpleCookie
         self.cookie = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
         for key in self.environ.iterkeys():
-            log('{k} -> {v}'.format(k=key, v=str(self.environ[key])))
+            log('{0}: {1}'.format(key, str(self.environ[key])))
         log(self.debug)
 
     # on __init__ , wsgi.input must be read/cached, 
@@ -269,8 +269,9 @@ class Request(object):
         from cStringIO import StringIO
         self.post_cache = StringIO('')
         if self.environ.get('REQUEST_METHOD') == 'POST':
-            if self.environ.get('wsgi.input', None):
-                self.post_cache = StringIO(self.environ['wsgi.input'].read(int(self.content_length)))
+            wsgi_input = self.environ.get('wsgi.input', None)
+            if wsgi_input:
+                self.post_cache = StringIO(wsgi_input.read(int(self.content_length)))
                 self.form = cgi.FieldStorage(fp=self.post_cache, environ=self.environ, keep_blank_values=True)
 
     @property
@@ -295,13 +296,15 @@ class Request(object):
         # remove falsy values
         return [p for p in self.path_info.split('/') if p]
 
-    @property
-    def post(self):
-        if self.environ.get('wsgi.input',None):
-            return self.form
-        else:
-            return None
-        #return cgi.FieldStorage(self.post_cache)
+    def post(self, field):
+        if self.method is not 'POST':
+            raise InvalidHTTPMethod('There are no fields to access, request should be POST')
+        if self.form:
+            value = self.form.getvalue(field)
+            if not value:
+                raise PostFieldNotFound('no value POSTed for {0}'.format(field))
+            else:
+                return value
 
     @property
     def query_string(self):
