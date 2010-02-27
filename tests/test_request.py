@@ -1,7 +1,7 @@
 import unittest
 from cStringIO import StringIO
 from pykaboo.pyka import Request
-from pykaboo.pyka import InvalidHTTPMethod
+from pykaboo.pyka import InvalidHTTPMethod, PostFieldNotFound
 
 class TestRequestAttributes(unittest.TestCase):
     """
@@ -30,7 +30,7 @@ class TestRequestAttributes(unittest.TestCase):
             'HTTP_HOST': 'localhost',
             'HTTP_COOKIE': '',
             'SCRIPT_NAME': '',
-            'QUERY_STRING': ''
+            'QUERY_STRING': 'test=spam&foo=bar'
         }
         self.request_get = Request(environ_get)
         self.request_post = Request(environ_post)
@@ -60,11 +60,12 @@ class TestRequestAttributes(unittest.TestCase):
         self.assertFalse(actual)
         self.assertEqual(actual, {})
         actual = self.request_post.query_string
-        self.assertFalse(actual)
-        self.assertEqual(actual, {})
+        self.assertTrue(actual)
+        self.assertEqual(actual, {'test': ['spam'], 'foo': ['bar']})
 
     def test_exception_post(self):
         self.assertRaises(InvalidHTTPMethod, self.request_get.post, 'test')
+        self.assertRaises(PostFieldNotFound, self.request_post.post, 'no_such_field')
 
     def test_init_post(self):
         actual = self.request_post.post('city')
@@ -74,11 +75,8 @@ class TestRequestAttributes(unittest.TestCase):
 
     def test_init_cookie(self):
         from Cookie import SimpleCookie
-        expected = SimpleCookie('')
-        actual = self.request_get.cookie
-        self.assertEqual(actual, expected)
-        actual = self.request_post.cookie
-        self.assertEqual(actual, expected)
+        actual = self.request_get.cookie('test')
+        self.assertEqual(actual, None)
 
     def test_init_content_length(self):
         actual = self.request_get.content_length

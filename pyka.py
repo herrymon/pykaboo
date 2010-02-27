@@ -40,6 +40,7 @@ PYKA_PATH = os.path.realpath(os.path.dirname(__file__))
 '''errors and logger'''
 class UnknownHTTPMethod(Exception): pass
 class InvalidHTTPMethod(Exception): pass
+class PostFieldNotFound(Exception): pass
 class TemplateNotFoundException(Exception): pass
 class RouteNotFound(Exception): pass
 class DbNotSupportedException(Exception): pass
@@ -204,6 +205,8 @@ class Response(object):
         else:
             self.__ctype = 'text/html; charset=UTF-8'
         self.__body = []
+        from Cookie import SimpleCookie
+        self.__cookie = SimpleCookie()
         # add default headers
         self.__header = ('200 OK', [('Content-Type', self.__ctype)])
 
@@ -232,18 +235,20 @@ class Response(object):
             else:
                 self.__body.append(str(response))
 
-    def add_cookie(self, cookie):
+    def cookie(self, key, value):
         """
            add Set-Cookie headers
         """
-        for key in cookie:
-            self.__header[1].append(('Set-Cookie', cookie[key].OutputString()))
+        self.__cookie[key] = value
+        self.__cookie[key]['path'] = '/'
+        for key in self.__cookie.iterkeys():
+            self.__header[1].append(('Set-Cookie', self.__cookie[key].OutputString()))
 
     def redirect(self, url_append, code=None):
         if not code:
             code = '303 SEE OTHER'
         self.response.header.state(code)
-        self.response.header.add('Location', self.request.base_url + url_append)
+        self.response.header.add('Location', self.__request.base_url + url_append)
 
 
 
@@ -257,7 +262,7 @@ class Request(object):
         self.path_info = self.environ.get('PATH_INFO', '')
         self._post_cache()
         from Cookie import SimpleCookie
-        self.cookie = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
+        self.cookie_cache = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
         for key in self.environ.iterkeys():
             log('{0}: {1}'.format(key, str(self.environ[key])))
         log(self.debug)
@@ -278,9 +283,12 @@ class Request(object):
     def base_url(self):
         return "{scheme}://{host}{script}/".format(
                     scheme=self.environ.get('wsgi.url_scheme'),
-                    host=self.environ.get('HTTP_HOST'),
+                    host=self.environ.get('HTTP_HOST', ''),
                     script=self.environ.get('SCRIPT_NAME','')
                 )
+    @property
+    def http_host(self):
+        return self.environ.get('HTTP_HOST', '')
 
     @property
     def method(self):
@@ -297,7 +305,7 @@ class Request(object):
         return [p for p in self.path_info.split('/') if p]
 
     def post(self, field):
-        if self.method is not 'POST':
+        if self.method != 'POST':
             raise InvalidHTTPMethod('There are no fields to access, request should be POST')
         if self.form:
             value = self.form.getvalue(field)
@@ -328,23 +336,10 @@ class Request(object):
                             pth=str(self.path)
         ) 
 
-    def cookie_set(self, key, val, default, add_to=None, **kwargs):
-        '''if COOKIE[key] exists set COOKIE[key] to val, else COOKIE[key] = default'''
-        has_cookie = self.cookie.get(key, None)
-        attributes = {'path':'/'}
-        attributes.update(kwargs)
-        is_number = isinstance(val, int)
-        if has_cookie:
-            if add_to:
-                # to support int increment, for now
-                if is_number:
-                    self.cookie[key] = int(self.cookie[key].coded_value) + val
-            else:
-                self.cookie[key] = val
-        else:
-            self.cookie[key] = default
-        for attr in attributes:
-            self.cookie[key][attr] = attributes[attr]
+    def cookie(self, key):
+        c = self.cookie_cache.get(key, None)
+        if c:
+            return self.cookie_cache[key].value
 
 
 class Template(object):
