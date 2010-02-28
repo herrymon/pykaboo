@@ -43,6 +43,7 @@ class InvalidHTTPMethod(Exception): pass
 class PostFieldNotFound(Exception): pass
 class TemplateNotFoundException(Exception): pass
 class RouteNotFound(Exception): pass
+class NotXHR(Exception): pass
 class DbNotSupportedException(Exception): pass
 
 class ErrorMiddleware(object):
@@ -100,15 +101,16 @@ class LoggingMiddleware(object):
         pass
 
 #utility functions
-def log(msg):
+def log(msg, logtype=None):
     from datetime import datetime
     import logging
     now = datetime.now()
-    log_filename = 'log-{year}-{month}-{day}.log'.format(year=now.year, month=now.month, day=now.day)
+    log_filename = 'log-{0.year}-{0.month}-{0.day}.log'.format(now)
     log_path = os.path.join(PYKA_PATH, 'log')
     log_file = os.path.join(log_path, log_filename)
     logging.basicConfig(filename=log_file, level=logging.DEBUG)
-    logging.debug(msg)
+    log_fn = {None: logging.info, 'debug': logging.debug, 'warning': logging.warning, 'error': logging.error, 'critical': logging.critical}
+    log_fn[logtype]('{0.hour:2}:{0.minute:2} {1}'.format(now, msg))
 
 def expires_in(**kwargs):
     """returns a string date, for cookie 'expires' attribute
@@ -137,7 +139,6 @@ def dictify(input_text, escape=True):
         for key in dict_input:
             dict_input[key] = [cgi.escape(val) for val in dict_input[key]]
     return dict_input
-
 
 def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
     """
@@ -264,7 +265,7 @@ class Request(object):
         from Cookie import SimpleCookie
         self.cookie_cache = SimpleCookie(self.environ.get('HTTP_COOKIE', ''))
         for key in self.environ.iterkeys():
-            log('{0}: {1}'.format(key, str(self.environ[key])))
+            log('{0}: {1!s}'.format(key, self.environ[key]))
         log(self.debug)
 
     # on __init__ , wsgi.input must be read/cached, 
@@ -326,20 +327,24 @@ class Request(object):
     def debug(self):
         """string representation of Request attributes"""
         return """
-            base_url: {base}
-            method: {meth}
-            cookie: {cook} 
-            path_info: {pi}
-            path: {pth}""".format(
-                            base=self.base_url, meth=self.method, 
-                            cook=str(self.cookie), pi=self.path_info, 
-                            pth=str(self.path)
-        ) 
+            base_url: {0.base_url}
+            method: {0.method}
+            cookie_cache: {0.cookie_cache} 
+            path_info: {0.path_info}
+            path: {0.path}
+            is_xhr: {1}""".format(self, self.is_xhr())
 
     def cookie(self, key):
         c = self.cookie_cache.get(key, None)
         if c:
             return self.cookie_cache[key].value
+
+    def is_xhr(self):
+        """
+        borrowed from webob request class @url http://bitbucket.org/ianb/webob/src/tip/webob/request.py 
+        Note: not all ajax requests will have this http header
+        """
+        return self.environ.get('HTTP_X_REQUESTED_WITH', None) == 'XMLHttpRequest'
 
 
 class Template(object):
@@ -374,7 +379,7 @@ class Template(object):
 
 
 # keys for handler_func in class Wsgi
-HandlerKey = namedtuple('HandlerKey', ['path','method'])
+HandlerKey = namedtuple('HandlerKey', ['path', 'method', 'is_xhr'])
 
 class Wsgi(object):
     """
@@ -385,25 +390,28 @@ class Wsgi(object):
 
     def __call__(self, environ, start_response):
         sys.stderr.write('path info {0}\n'.format(environ.get('PATH_INFO','')))
-        request = Request(environ)
-        self.method = request.method
-        response = Response(request)
+        self.request = Request(environ)
+        self.method = self.request.method
+        response = Response(self.request)
         
-        handler_func = self.handlers.get(self.route(request.path_info), None)
-        handler_func.request = request
+        handler_func = self.handlers.get(self.route(), None)
+        handler_func.request = self.request
         handler_func.response = response
         response.add(handler_func)
 
         start_response(response.status, response.header)
         return response.body
                 
-    def route(self, path_info):
+    def route(self):
         from re import compile, search
         for route in self.handlers.iterkeys():
             pattern = compile('^{0}$'.format(route.path)) #must be exact begin-to-end
-            if search(pattern, path_info):
+            if search(pattern, self.request.path_info):
                 if route.method == self.method:
-                    return route
+                    if route.is_xhr == self.request.is_xhr():
+                        return route
+                    else:
+                        raise NotXHR('Expecting HTTP_X_REQUEST_WITH header, but found nothing, zero, zip, nil')
                 else:
                     raise InvalidHTTPMethod('Expecting HTTP method {0}, found {1}'.format(method, self.method))
         else:
@@ -412,13 +420,13 @@ class Wsgi(object):
 
 application = ErrorMiddleware(Wsgi())
 
-def bind(route, app, method):
+def bind(route, app, method, is_xhr=False):
     """
         add handler mapping to Wsgi instance
         { HandlerKey : handler_func }
     """
     def decor(fn):
-        app.handlers[HandlerKey(route, method)] = fn
+        app.handlers[HandlerKey(route, method, is_xhr)] = fn
         return fn
     return decor
 
@@ -427,6 +435,12 @@ def post(route):
 
 def get(route):
     return bind(route, application, 'GET')
+
+def xget(route):
+    return bind(route, application, 'GET', is_xhr=True)
+
+def xpost(route):
+    return bind(route, application, 'POST', is_xhr=True)
 
 def serve(application, port=8080):
     try:
