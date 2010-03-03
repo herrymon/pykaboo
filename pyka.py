@@ -90,16 +90,6 @@ class ErrorMiddleware(object):
             return "500 INTERNAL SERVER ERROR", "<h1>500 Internal Server Error</h1><pre>{tb}</pre>".format(tb='<br/>'.join(traceback))
 
 
-class LoggingMiddleware(object):
-    """
-        wsgi middleware to display at bottom of webpage, environ info
-    """
-    def __init__(self, app):
-        self.app = app
-
-    def __call__(self, environ, start_response):
-        pass
-
 #utility functions
 def log(msg, logtype=None):
     from datetime import datetime
@@ -131,7 +121,7 @@ def dictify(input_text, escape=True):
         Eg name=Erick&pets=rat&pets=cats to {'name': ['Erick'], 'pets': ['rats', 'cats']}
         Note: all values are lists
     """
-    log('xutils.dictify: %d %s' %(len(input_text), input_text))
+    log('xutils.dictify: {0} {1}'.format(len(input_text), input_text))
     from urlparse import parse_qs
     dict_input = parse_qs(input_text)
     # use cgi.escape built-in to escape "&<>" input_text 
@@ -196,8 +186,7 @@ class Database(object):
 # main components
 class Response(object):
     """
-        wsgi Response, wraps a Request object,
-        param for start_response
+        wsgi Response, has a Request object attribute,
     """
     def __init__(self, request, ctype=None):
         self.__request = request
@@ -411,11 +400,11 @@ class Wsgi(object):
                     if route.is_xhr == self.request.is_xhr():
                         return route
                     else:
-                        raise NotXHR('Expecting HTTP_X_REQUEST_WITH header, but found nothing, zero, zip, nil')
+                        raise NotXHR('Expecting HTTP_X_REQUESTED_WITH header, but found nothing, zero, zip, nil')
                 else:
                     raise InvalidHTTPMethod('Expecting HTTP method {0}, found {1}'.format(method, self.method))
         else:
-            raise RouteNotFound("No handler found for route: {0}".format(path_info))
+            raise RouteNotFound("No handler found for route: {0}".format(self.request.path_info))
             
 
 application = ErrorMiddleware(Wsgi())
