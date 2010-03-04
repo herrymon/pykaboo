@@ -2,9 +2,12 @@ import unittest
 import sys
 
 import os, sys
-sys.path.append(os.path.dirname('/home/erick/labs/py/pykaboo'))   #@see http://code.google.com/p/modwsgi/wiki/IntegrationWithDjango
+# assumes that pykaboo resides in a dir on top of this file
+pykaboo_path = os.path.split(os.path.realpath(os.path.dirname(__file__)))[0]
+sys.path.append(os.path.dirname(pykaboo_path))
 
 if __name__ == '__main__':
+    # assumes that all testcase modules are in the same directory as this file
     test_modules = (
                     'test_response', 
                     'test_request', 
