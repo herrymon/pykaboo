@@ -327,11 +327,13 @@ class Request(object):
         c = self.cookie_cache.get(key, None)
         if c:
             return self.cookie_cache[key].value
+        else:
+            return ''
 
     def is_xhr(self):
         """
         borrowed from webob request class @url http://bitbucket.org/ianb/webob/src/tip/webob/request.py 
-        Note: not all ajax requests will have this http header
+        Note: not all ajax requests will have HTTP_X_REQUESTED_WITH http header
         """
         return self.environ.get('HTTP_X_REQUESTED_WITH', None) == 'XMLHttpRequest'
 
@@ -411,6 +413,7 @@ application = ErrorMiddleware(Wsgi())
 
 def bind(route, app, method, is_xhr=False):
     """
+        decorator function
         add handler mapping to Wsgi instance
         { HandlerKey : handler_func }
     """

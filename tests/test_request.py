@@ -76,7 +76,7 @@ class TestRequestAttributes(unittest.TestCase):
     def test_init_cookie(self):
         from Cookie import SimpleCookie
         actual = self.request_get.cookie('test')
-        self.assertEqual(actual, None)
+        self.assertEqual(actual, '')
 
     def test_init_content_length(self):
         actual = self.request_get.content_length
