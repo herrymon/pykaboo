@@ -404,7 +404,7 @@ class Wsgi(object):
                     else:
                         raise NotXHR('Expecting HTTP_X_REQUESTED_WITH header, but found nothing, zero, zip, nil')
                 else:
-                    raise InvalidHTTPMethod('Expecting HTTP method {0}, found {1}'.format(method, self.method))
+                    raise InvalidHTTPMethod('Expecting HTTP method {0}, found {1}'.format(route.method, self.method))
         else:
             raise RouteNotFound("No handler found for route: {0}".format(self.request.path_info))
             
