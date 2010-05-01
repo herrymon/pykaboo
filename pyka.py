@@ -1,7 +1,7 @@
 """
 desc:
-an attempt at a tiny wsgi framework, 
-status: usable
+a python newbies attempt at a one-file wsgi framework
+status: usable but not great
 
 inspired by:
 Ian Bicking tutorial - http://pythonpaste.org/webob/do-it-yourself.html, 
@@ -23,14 +23,15 @@ Cookie module - http://docs.python.org/library/cookie.html
 
 notes:
 dev runs on python 2.6.4, 
-apache with mod_wsgi/wsgiref.simple_server
-requires python 2.5
+so far I have only tried deploying it via apache with mod_wsgi
+wsgiref.simple_server (for dev)
+requires python 2.6
 """ 
 
 __version__ = '0.1'
 __author__ = 'herrymonster@gmail.com'
 __license__ = 'do whatever you want, Ie use at your own risk'
-__all__ = ['application', 'bind', 'Request', 'Response', 'mako_render']
+__all__ = ['application', 'get', 'post', 'xget', 'xpost', 'Request', 'Response', 'mako_render']
 
 import os, sys, cgi
 from collections import namedtuple
@@ -332,7 +333,7 @@ class Request(object):
 
     def is_xhr(self):
         """
-        borrowed from webob request class @url http://bitbucket.org/ianb/webob/src/tip/webob/request.py 
+        plagiarized from webob request class @url http://bitbucket.org/ianb/webob/src/tip/webob/request.py 
         Note: not all ajax requests will have HTTP_X_REQUESTED_WITH http header
         """
         return self.environ.get('HTTP_X_REQUESTED_WITH', None) == 'XMLHttpRequest'
@@ -380,11 +381,14 @@ class Wsgi(object):
         self.handlers = {} 
 
     def __call__(self, environ, start_response):
-        sys.stderr.write('path info {0}\n'.format(environ.get('PATH_INFO','')))
+        # get request, extra attribute, self.method, a copy of request.method for convenience
         self.request = Request(environ)
         self.method = self.request.method
         response = Response(self.request)
         
+        # if self.route() does not find a handler or catches error in trying to find a handler, this request is dead, 
+        # maybe add another if None check??? overkill?!?
+
         handler_func = self.handlers.get(self.route(), None)
         handler_func.request = self.request
         handler_func.response = response
@@ -396,8 +400,8 @@ class Wsgi(object):
     def route(self):
         from re import compile, search
         for route in self.handlers.iterkeys():
-            pattern = compile('^{0}$'.format(route.path)) #must be exact begin-to-end
-            if search(pattern, self.request.path_info):
+            pattern = compile('^{0}$'.format(route.path)) #must be exact match begin-to-end
+            if search(pattern, self.request.path_info): # check if path_info matches a route, routes method matches the handler method
                 if route.method == self.method:
                     if route.is_xhr == self.request.is_xhr():
                         return route
@@ -409,7 +413,8 @@ class Wsgi(object):
             raise RouteNotFound("No handler found for route: {0}".format(self.request.path_info))
             
 
-application = ErrorMiddleware(Wsgi())
+application = ErrorMiddleware(Wsgi()) # wrap it in middleware so we can have more usefull error message 
+                                      # and some html formatting for 404 and 500
 
 def bind(route, app, method, is_xhr=False):
     """
