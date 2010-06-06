@@ -155,7 +155,7 @@ def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
 class Database(object):
     """
         a simple interface to rdbms, 
-        supports only sqlite for now
+        tested only with sqlite3
         @requires python 2.5
     """
     def connect(self, db_driver, db_file):
@@ -333,7 +333,7 @@ class Request(object):
 
     def is_xhr(self):
         """
-        plagiarized from webob request class @url http://bitbucket.org/ianb/webob/src/tip/webob/request.py 
+        copied from webob request class @url http://bitbucket.org/ianb/webob/src/tip/webob/request.py 
         Note: not all ajax requests will have HTTP_X_REQUESTED_WITH http header
         """
         return self.environ.get('HTTP_X_REQUESTED_WITH', None) == 'XMLHttpRequest'
