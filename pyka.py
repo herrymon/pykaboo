@@ -1,7 +1,6 @@
 """
-desc:
-a python newbies attempt at a one-file wsgi framework
-status: usable but not great
+one-file wsgi framework
+status: usable but still needs improving
 
 inspired by:
 Ian Bicking tutorial - http://pythonpaste.org/webob/do-it-yourself.html, 
