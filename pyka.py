@@ -151,7 +151,7 @@ def mako_render(template_name, template_paths=None, module_path=None, **kwargs):
     return template.render(**kwargs)
 
 
-# Database class
+# 
 class Database(object):
     """
         a simple interface to rdbms, 
